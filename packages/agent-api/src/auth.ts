@@ -33,17 +33,38 @@ export function getAuthenticationUserId(request: HttpRequest): string | undefine
 }
 
 export async function getInternalUserId(request: HttpRequest, body?: any): Promise<string | undefined> {
-  // Get the user ID from Azure easy auth if it's available,
+  const db = await UserDbService.getInstance();
+
+  // Get the user ID from Azure easy auth if it's available
   const authUserId = getAuthenticationUserId(request);
   if (authUserId) {
     // Exchange the auth user ID to the internal user ID
-    const db = await UserDbService.getInstance();
     const user = await db.getUserById(authUserId);
     if (user) {
       return user.id;
     }
   }
 
-  // Get the user ID from the request as a fallback
-  return body?.context?.userId ?? request.query.get('userId') ?? undefined;
+  // Get the user ID from the request body/query as a fallback
+  const providedUserId = body?.context?.userId ?? request.query.get('userId');
+  if (providedUserId) {
+    return providedUserId;
+  }
+
+  // Fall back to anonymous user for Kubernetes/development environments
+  const allowAnonymous = process.env.ALLOW_ANONYMOUS_AUTH === 'true' || !process.env.AZURE_COSMOSDB_NOSQL_ENDPOINT;
+  if (allowAnonymous) {
+    // Use the same anonymous user ID as /api/me endpoint
+    const anonymousAuthId = 'anonymous-user';
+    const id = require('node:crypto').createHash('sha256').update(anonymousAuthId).digest('hex').slice(0, 32);
+
+    // Ensure user exists in DB
+    let user = await db.getUserById(id);
+    if (!user) {
+      user = await db.createUser(id);
+    }
+    return id;
+  }
+
+  return undefined;
 }

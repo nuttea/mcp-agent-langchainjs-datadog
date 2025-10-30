@@ -31,9 +31,14 @@
     "@opentelemetry/instrumentation": "^0.206.0",
     "@opentelemetry/sdk-trace-base": "^2.1.0",
     "@opentelemetry/sdk-trace-node": "^2.0.1",
-    "langchain": "^1.0.0"
+    "dd-trace": "^5.74.0",
+    "langchain": "^1.0.0",
+    "pino": "^9.14.0",
+    "pino-pretty": "^13.1.2"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.5",
     "@types/node": "^22",
     "azure-functions-core-tools": "^4",
     "dotenv": "^17.2.1",

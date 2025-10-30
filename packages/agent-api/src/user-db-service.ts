@@ -9,7 +9,7 @@ export class UserDbService {
   private usersContainer: Container | undefined = undefined;
   private isCosmosDbInitialized = false;
   private readonly inMemoryStorage = new Map<string, any>();
-  private useInMemoryStorage = false;
+  private useInMemoryStorage = true; // Default to in-memory storage
 
   static async getInstance(): Promise<UserDbService> {
     if (!UserDbService.instance) {
@@ -25,11 +25,12 @@ export class UserDbService {
     try {
       const endpoint = process.env.AZURE_COSMOSDB_NOSQL_ENDPOINT;
       if (!endpoint) {
-        console.warn('Cosmos DB endpoint not found in environment variables. Falling back to in-memory storage.');
+        console.log('Cosmos DB endpoint not configured. Using in-memory storage for users.');
         this.useInMemoryStorage = true;
         return;
       }
 
+      console.log('Attempting to connect to Cosmos DB for users...');
       const credential = new DefaultAzureCredential();
       this.client = new CosmosClient({ endpoint, aadCredentials: credential });
       const databaseId = 'userDB';
@@ -41,9 +42,11 @@ export class UserDbService {
       });
       this.usersContainer = container;
       this.isCosmosDbInitialized = true;
-      console.log('Connected to Cosmos DB for users');
+      this.useInMemoryStorage = false; // Switch to Cosmos DB if connection succeeds
+      console.log('Successfully connected to Cosmos DB for users');
     } catch (error) {
-      console.error('Failed to initialize Cosmos DB for users:', error);
+      console.warn('Failed to initialize Cosmos DB for users. Falling back to in-memory storage.', error);
+      this.useInMemoryStorage = true;
     }
   }
 
@@ -70,11 +73,18 @@ export class UserDbService {
 
     if (this.useInMemoryStorage) {
       this.inMemoryStorage.set(id, user);
+      console.log(`Created user ${id} in in-memory storage`);
       return user;
     }
 
-    if (!this.isCosmosDbInitialized) throw new Error('Cosmos DB not initialized');
-    const { item } = await this.usersContainer!.items.create(user);
-    return item;
+    if (!this.isCosmosDbInitialized) {
+      console.warn('Cosmos DB not initialized, falling back to in-memory storage');
+      this.inMemoryStorage.set(id, user);
+      return user;
+    }
+
+    const { resource } = await this.usersContainer!.items.create(user);
+    console.log(`Created user ${id} in Cosmos DB`);
+    return resource;
   }
 }

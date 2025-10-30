@@ -4,7 +4,7 @@ info:
   description: API for managing burger orders and related operations
   version: 1.0.0
 servers:
-  - url: <BURGER_API_HOST>/api
+  - url: http://34.87.159.194/api
     description: Burger API server
 paths:
   /:

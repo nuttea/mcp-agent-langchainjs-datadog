@@ -4,8 +4,9 @@ dist/
 .tmp/
 
 # Logs
-logs
+logs/
 *.log
+build-*.log
 npm-debug.log*
 pnpm-debug.log*
 yarn-debug.log*
@@ -20,3 +21,8 @@ yarn-error.log*
 Thumbs.db
 /TODO*
 user.json
+
+# Kubernetes secrets - NEVER commit real secrets!
+k8s/config/secrets.yaml
+**/secrets.yaml
+secrets.*.yaml

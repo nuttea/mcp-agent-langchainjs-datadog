@@ -1,0 +1,88 @@
+# Datadog Agent Configuration for GKE
+# Deploy with:
+#   helm install datadog-agent -f k8s/datadog/datadog-values.yaml \
+#     --set datadog.clusterName=<CLUSTER_NAME> \
+#     datadog/datadog
+#
+# Note: API keys are stored in Kubernetes secret 'datadog-secret'
+
+datadog:
+  site: "datadoghq.com"
+
+  # Cluster name - REQUIRED: Set via --set datadog.clusterName=<name>
+  # This identifies your cluster in Datadog
+  clusterName: ""
+
+  # API key stored in Kubernetes secret
+  apiKeyExistingSecret: "datadog-secret"
+
+  # APM with Single Step Instrumentation
+  apm:
+    instrumentation:
+      enabled: true
+      targets:
+        - name: "mcp-agent-apps"
+          namespaceSelector:
+            matchNames:
+              - "mcp-agent-dev"
+              - "mcp-agent-prod"
+          ddTraceVersions:
+            #java: "1"
+            #python: "3"
+            js: "5"
+            #php: "1"
+            #dotnet: "3"
+            #ruby: "2"
+          ddTraceConfigs:
+            - name: "DD_PROFILING_ENABLED"
+              value: "auto"
+
+  # Container logs collection
+  logs:
+    enabled: true
+    containerCollectAll: true
+    autoMultiLineDetection: true
+    containerCollectUsingFiles: true
+
+  # Application Security Management (ASM)
+  asm:
+    threats:
+      enabled: true
+    sca:
+      enabled: true
+    iast:
+      enabled: true
+
+  # Security Agent
+  securityAgent:
+    runtime:
+      enabled: true
+    compliance:
+      enabled: true
+
+  # SBOM collection
+  sbom:
+    containerImage:
+      enabled: true
+    host:
+      enabled: true
+
+  # Service Monitoring (Universal Service Monitoring)
+  serviceMonitoring:
+    enabled: true
+
+  # Network Performance Monitoring
+  networkMonitoring:
+    enabled: true
+
+  # Process Agent
+  processAgent:
+    processCollection: true
+
+# Use GCR registry for Datadog images
+registry: "gcr.io/datadoghq"
+
+# GKE provider configuration
+providers:
+  gke:
+    cos: true

@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: mcp-agent-dev
+  labels:
+    app: mcp-agent
+    environment: dev
+data:
+  # GCP Configuration
+  GCP_PROJECT_ID: "datadog-ese-sandbox"
+  FIRESTORE_DATABASE: "(default)"
+  GCS_BUCKET: "mcp-agent-burgers-data"
+  GCS_IMAGES_BUCKET: "mcp-agent-burgers-images"
+
+  # Service URLs (internal cluster communication)
+  BURGER_API_URL: "http://burger-api:8080"
+  BURGER_MCP_URL: "http://burger-mcp:3000/mcp"
+  AGENT_API_URL: "http://agent-api:8080"
+
+  # Public-facing URLs for constructing image URLs
+  # This should be set to the external LoadBalancer IP or domain
+  PUBLIC_BASE_URL: "http://34.87.159.194"
+
+  # Application Settings
+  NODE_ENV: "production"
+  LOG_LEVEL: "info"
+
+  # Datadog Configuration
+  DD_ENV: "production"
+  DD_SERVICE: "mcp-agent"
+  DD_VERSION: "1.0.0"
+  DD_LOGS_INJECTION: "true"
+  DD_TRACE_ENABLED: "true"
+  DD_PROFILING_ENABLED: "true"
+  DD_RUNTIME_METRICS_ENABLED: "true"

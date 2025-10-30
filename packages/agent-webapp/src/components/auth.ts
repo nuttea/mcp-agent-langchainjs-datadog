@@ -1,15 +1,13 @@
 import { LitElement, css, html, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
-import { styleMap } from 'lit/directives/style-map.js';
-import { getUserInfo, AuthDetails } from '../services/auth.service.js';
+import { getUserInfo, AuthDetails, setUserId, clearUserId } from '../services/auth.service.js';
 import personSvg from '../../assets/icons/person.svg?raw';
 import logoutSvg from '../../assets/icons/logout.svg?raw';
 import microsoftSvg from '../../assets/providers/microsoft.svg?inline';
 import githubSvg from '../../assets/providers/github.svg?inline';
 
-const loginRoute = '/.auth/login';
-const logoutRoute = '/.auth/logout';
+// Removed Azure-specific auth routes
 
 export type AuthComponentOptions = {
   strings: {
@@ -86,19 +84,26 @@ export class AuthComponent extends LitElement {
   @property() logoutRedirect = '/';
   @state() protected _userDetails: AuthDetails | undefined;
   @state() protected loaded = false;
+  @state() protected _userIdInput = '';
 
   get userDetails() {
     return this._userDetails;
   }
 
-  onLoginClicked(provider: string) {
-    const redirect = `${loginRoute}/${provider}?post_login_redirect_uri=${encodeURIComponent(this.loginRedirect)}`;
-    window.location.href = redirect;
+  async onLoginSubmit(e: Event) {
+    e.preventDefault();
+    if (this._userIdInput.trim()) {
+      setUserId(this._userIdInput.trim());
+      this._userDetails = await getUserInfo(true);
+      this._userIdInput = '';
+      this.requestUpdate();
+    }
   }
 
-  onLogoutClicked() {
-    const redirect = `${logoutRoute}?post_logout_redirect_uri=${encodeURIComponent(this.logoutRedirect)}`;
-    window.location.href = redirect;
+  async onLogoutClicked() {
+    clearUserId();
+    this._userDetails = undefined;
+    this.requestUpdate();
   }
 
   protected renderStatus = () =>
@@ -121,24 +126,20 @@ export class AuthComponent extends LitElement {
 
   protected renderLoginOptions = () =>
     html`<section class="auth-login">
-      <div class="login-buttons">
-        ${this.options.providers.map((provider) => {
-          const providerStyle = {
-            '--button-bg': provider.color,
-            '--button-color': provider.textColor,
-          };
-          return html`<button
-            class="login"
-            @click=${() => {
-              this.onLoginClicked(provider.id);
-            }}
-            style=${styleMap(providerStyle)}
-          >
-            <img src="${provider.icon}" alt="" />
-            <span>${provider.label}</span>
-          </button>`;
-        })}
-      </div>
+      <form class="login-form" @submit=${this.onLoginSubmit}>
+        <label for="userId">Enter your User ID:</label>
+        <input
+          type="text"
+          id="userId"
+          placeholder="e.g., john.doe"
+          .value=${this._userIdInput}
+          @input=${(e: InputEvent) => {
+            this._userIdInput = (e.target as HTMLInputElement).value;
+          }}
+          required
+        />
+        <button type="submit" class="login-button">Continue</button>
+      </form>
     </section>`;
 
   protected renderLogout = () =>
@@ -152,7 +153,7 @@ export class AuthComponent extends LitElement {
       ${unsafeSVG(logoutSvg)}
     </button>`;
 
-  protected override async connectedCallback() {
+  override async connectedCallback() {
     super.connectedCallback();
     const userDetails = await getUserInfo();
     this._userDetails = userDetails;
@@ -256,22 +257,42 @@ export class AuthComponent extends LitElement {
     .auth-login {
       display: flex;
       justify-content: center;
+      align-items: center;
+      min-height: 300px;
     }
-    .login-buttons {
+    .login-form {
       padding: var(--space-xl);
       display: flex;
       flex-direction: column;
       gap: var(--space-md);
-      align-items: center;
-    }
-    .login {
       width: 100%;
-      justify-content: left;
-      gap: var(--space-md);
+      max-width: 400px;
 
-      img {
-        width: 24px;
-        height: 24px;
+      label {
+        font-size: 1.1rem;
+        font-weight: 500;
+        color: var(--text-color);
+      }
+
+      input[type="text"] {
+        padding: var(--space-md);
+        font-size: 1rem;
+        border: 2px solid var(--bg);
+        border-radius: calc(var(--border-radius) / 2);
+        outline: none;
+        transition: border-color 0.3s ease;
+
+        &:focus {
+          border-color: var(--primary);
+        }
+      }
+
+      .login-button {
+        --button-bg: var(--primary);
+        --button-color: var(--text-invert-color);
+        padding: var(--space-md);
+        font-size: 1.1rem;
+        font-weight: 500;
       }
     }
     .logout {
