@@ -16,6 +16,7 @@
     "clean": "npx rimraf dist"
   },
   "dependencies": {
+    "@datadog/browser-rum": "^6.23.0",
     "lit": "^3.3.0"
   },
   "devDependencies": {

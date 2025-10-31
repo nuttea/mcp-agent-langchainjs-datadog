@@ -450,23 +450,25 @@ export class ChatComponent extends LitElement {
 
   static override styles = css`
     :host {
-      /* Base properties */
-      --primary: var(--azc-primary, #07f);
+      /* Base properties - Datadog Theme */
+      --primary: var(--azc-primary, #632CA6); /* Datadog Purple */
+      --secondary: var(--azc-secondary, #F653A6); /* Datadog Pink */
+      --accent: var(--azc-accent, #00B9E4); /* Datadog Teal */
       --error: var(--azc-error, #e30);
-      --text-color: var(--azc-text-color, #000);
+      --text-color: var(--azc-text-color, #1E1433);
       --text-invert-color: var(--azc--text-invert-color, #fff);
       --disabled-color: var(--azc-disabled-color, #ccc);
-      --bg: var(--azc-bg, #eee);
-      --border-color: var(--azc-border-color, #ccc);
+      --bg: var(--azc-bg, #F5F5F5);
+      --border-color: var(--azc-border-color, #E5E5E5);
       --card-bg: var(--azc-card-bg, #fff);
-      --card-shadow: var(--azc-card-shadow, 0 0.3px 0.9px rgba(0 0 0 / 12%), 0 1.6px 3.6px rgba(0 0 0 / 16%));
+      --card-shadow: var(--azc-card-shadow, 0 2px 8px rgba(99, 44, 166, 0.1), 0 4px 16px rgba(99, 44, 166, 0.08));
       --space-md: var(--azc-space-md, 12px);
       --space-xl: var(--azc-space-xl, calc(var(--space-md) * 2));
       --space-xs: var(--azc-space-xs, calc(var(--space-md) / 2));
       --space-xxs: var(--azc-space-xs, calc(var(--space-md) / 4));
       --border-radius: var(--azc-border-radius, 16px);
       --focus-outline: var(--azc-focus-outline, 2px solid);
-      --overlay-color: var(--azc-overlay-color, rgba(0 0 0 / 40%));
+      --overlay-color: var(--azc-overlay-color, rgba(99, 44, 166, 0.4));
 
       /* Component-specific properties */
       --error-color: var(--azc-error-color, var(--error));

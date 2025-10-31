@@ -2,10 +2,10 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: app-config
-  namespace: mcp-agent-dev
+  namespace: mcp-agent-prod
   labels:
     app: mcp-agent
-    environment: dev
+    environment: prod
 data:
   # GCP Configuration
   GCP_PROJECT_ID: "datadog-ese-sandbox"
@@ -19,15 +19,15 @@ data:
   AGENT_API_URL: "http://agent-api:8080"
 
   # Public-facing URLs for constructing image URLs
-  # This should be set to the external LoadBalancer IP or domain
-  PUBLIC_BASE_URL: "https://dev.platform-engineering-demo.dev"
+  # This should be set to the external domain (Cloudflare handles HTTPS)
+  PUBLIC_BASE_URL: "https://platform-engineering-demo.dev"
 
   # Application Settings
   NODE_ENV: "production"
   LOG_LEVEL: "info"
 
   # Datadog Configuration
-  DD_ENV: "dev"
+  DD_ENV: "production"
   DD_SERVICE: "agent-api"
   DD_VERSION: "1.0.0"
   DD_LOGS_INJECTION: "true"

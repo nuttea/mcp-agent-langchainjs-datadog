@@ -4,7 +4,7 @@ info:
   description: API for managing burger orders and related operations
   version: 1.0.0
 servers:
-  - url: http://34.87.159.194/api
+  - url: https://dev.platform-engineering-demo.dev/api
     description: Burger API server
 paths:
   /:

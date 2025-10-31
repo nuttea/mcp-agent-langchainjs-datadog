@@ -1,7 +1,14 @@
 :root {
-  --azc-primary: #de471d;
-  --azc-bg: #eee;
+  /* Datadog Brand Colors */
+  --azc-primary: #632CA6; /* Datadog Purple */
+  --azc-secondary: #F653A6; /* Datadog Pink */
+  --azc-accent: #00B9E4; /* Datadog Teal */
+  --azc-success: #7FD691; /* Datadog Green */
+  --azc-dark: #1E1433; /* Datadog Dark Background */
+  --azc-bg: #F5F5F5; /* Light Background */
   --azc-border-radius: 16px;
+  --azc-text-color: #1E1433;
+  --azc-text-invert-color: #FFFFFF;
 }
 
 html,
@@ -18,8 +25,8 @@ body {
 nav {
   display: flex;
   flex: 0 1 auto;
-  background: #333;
-  color: #fff;
+  background: var(--azc-dark); /* Datadog Dark Purple */
+  color: var(--azc-text-invert-color);
   padding: 16px;
   font-family:
     'Segoe UI',
@@ -31,6 +38,7 @@ nav {
   font-size: 1.25rem;
   align-items: center;
   justify-content: space-between;
+  box-shadow: 0 2px 8px rgba(99, 44, 166, 0.15);
 
   & img {
     height: 38px;

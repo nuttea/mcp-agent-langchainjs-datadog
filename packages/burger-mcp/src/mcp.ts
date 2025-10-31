@@ -22,7 +22,7 @@ export function createMcpTool<T extends z.ZodTypeAny>(
     name: string;
     description: string;
     schema?: z.ZodObject<z.ZodRawShape, any, T>;
-    handler: (args: z.infer<z.ZodObject<z.ZodRawShape, any, T>>) => Promise<string>;
+    handler: (args: any) => Promise<string>;
   },
 ) {
   if (options.schema) {

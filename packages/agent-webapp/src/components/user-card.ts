@@ -7,6 +7,13 @@ import copySvg from '../../assets/icons/copy.svg?raw';
 import burgerOutlineSvg from '../../assets/icons/burger-outline.svg?raw';
 import cardSvg from '../../assets/icons/card.svg?raw';
 
+interface MemberInfo {
+  avatar: string;
+  email: string;
+  memberSince: string;
+  location: string;
+}
+
 @customElement('azc-user-card')
 export class UserCard extends LitElement {
   @state() protected userId = '';
@@ -14,6 +21,7 @@ export class UserCard extends LitElement {
   @state() protected hasError = false;
   @state() protected username = '';
   @state() protected isOpen = false;
+  @state() protected memberInfo: MemberInfo | null = null;
 
   constructor() {
     super();
@@ -87,11 +95,41 @@ export class UserCard extends LitElement {
     <div class="card card-shine">
       <span class="burger">${unsafeSVG(burgerOutlineSvg)}</span>
       <div class="card-content">
-        <h1>Contoso Burgers</h1>
-        <h2>Membership Card</h2>
-        <p>Card attributed to:</p>
-        <div><pre>${this.username}</pre></div>
-        <p>Unique user ID:</p>
+        ${this.memberInfo
+          ? html`
+              <div class="member-header">
+                <img src="${this.memberInfo.avatar}" alt="Member avatar" class="member-avatar" />
+                <div class="member-title">
+                  <h1>Contoso Burgers</h1>
+                  <h2>VIP Member</h2>
+                </div>
+              </div>
+              <div class="member-details">
+                <div class="detail-row">
+                  <span class="detail-label">Name:</span>
+                  <span class="detail-value">${this.username}</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Email:</span>
+                  <span class="detail-value">${this.memberInfo.email}</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Member Since:</span>
+                  <span class="detail-value">${this.memberInfo.memberSince}</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Location:</span>
+                  <span class="detail-value">${this.memberInfo.location}</span>
+                </div>
+              </div>
+            `
+          : html`
+              <h1>Contoso Burgers</h1>
+              <h2>Membership Card</h2>
+              <p>Card attributed to:</p>
+              <div><pre>${this.username}</pre></div>
+            `}
+        <p>Unique Member ID:</p>
         <div class="user-id-row">
           <pre class="user-id">${this.userId}</pre>
           <button
@@ -104,10 +142,29 @@ export class UserCard extends LitElement {
             <span class="copy-icon">${unsafeSVG(copySvg)}</span>
           </button>
         </div>
-        <div class="warning">This user ID is personal, do not share it with anyone!</div>
+        <div class="warning">This member ID is personal, do not share it with anyone!</div>
       </div>
     </div>
   `;
+
+  protected fetchRandomUserInfo = async (): Promise<MemberInfo | null> => {
+    try {
+      // Fetch random user data from Random User API
+      const response = await fetch('https://randomuser.me/api/');
+      const data = await response.json();
+      const user = data.results[0];
+
+      return {
+        avatar: user.picture.large,
+        email: user.email,
+        memberSince: new Date(user.registered.date).toLocaleDateString(),
+        location: `${user.location.city}, ${user.location.country}`,
+      };
+    } catch (error) {
+      console.error('Error fetching random user info:', error);
+      return null;
+    }
+  };
 
   protected getUserId = async () => {
     this.isLoading = true;
@@ -122,6 +179,9 @@ export class UserCard extends LitElement {
       }
 
       this.userId = id;
+
+      // Fetch additional member info from Random User API
+      this.memberInfo = await this.fetchRandomUserInfo();
     } catch (error) {
       console.error('Error fetching user ID:', error);
       this.hasError = true;
@@ -200,7 +260,7 @@ export class UserCard extends LitElement {
       max-width: 640px;
       width: 100%;
       max-height: 90vh;
-      background: var(--azc-primary);
+      background: linear-gradient(135deg, #632CA6 0%, #4B2578 50%, #F653A6 100%); /* Datadog Purple to Pink gradient */
       border-radius: var(--azc-border-radius, 16px);
     }
     .close-button {
@@ -248,13 +308,13 @@ export class UserCard extends LitElement {
     }
     .card {
       position: relative;
-      background: var(--azc-primary);
+      background: linear-gradient(135deg, #632CA6 0%, #4B2578 50%, #F653A6 100%); /* Datadog Purple to Pink gradient */
       border-radius: var(--azc-border-radius);
       padding: 2rem;
       box-shadow:
-        0 0 0 1px rgba(0, 0, 0, 0.2),
-        -1px -1px 1px rgba(255, 255, 255, 0.3),
-        2px 4px 8px rgba(0, 0, 0, 0.4);
+        0 0 0 1px rgba(99, 44, 166, 0.3),
+        -1px -1px 1px rgba(246, 83, 166, 0.2),
+        2px 4px 16px rgba(99, 44, 166, 0.4);
       font-family: 'Sofia Sans Condensed', sans-serif;
       text-align: left;
       width: 100%;
@@ -361,6 +421,46 @@ export class UserCard extends LitElement {
       overflow: hidden;
       clip: rect(0, 0, 0, 0);
       border: 0;
+    }
+    .member-header {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .member-avatar {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      border: 3px solid #fff;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    }
+    .member-title {
+      flex: 1;
+    }
+    .member-details {
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: calc(var(--azc-border-radius) / 2);
+      padding: 1rem;
+      margin: 1rem 0;
+    }
+    .detail-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.5rem 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+    }
+    .detail-row:last-child {
+      border-bottom: none;
+    }
+    .detail-label {
+      font-weight: 600;
+      opacity: 0.9;
+    }
+    .detail-value {
+      text-align: right;
+      font-weight: 500;
     }
   `;
 }

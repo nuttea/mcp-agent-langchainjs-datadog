@@ -1,3 +1,8 @@
+// IMPORTANT: Datadog tracer must be imported first, before any other imports
+// Reference: https://docs.datadoghq.com/llm_observability/setup/sdk/nodejs/
+// This import initializes the Datadog tracer as a side effect
+import './dd-tracer.js';
+
 import express from 'express';
 import cors from 'cors';
 import { createHash } from 'node:crypto';
@@ -44,6 +49,12 @@ Make sure the last question ends with ">>", and phrase the questions as if you w
 - Use GFM markdown formatting in your responses, to make your answers easy to read and visually appealing. You can use tables, headings, bullet points, bold text, italics, images, and links where appropriate.
 - Only use image links from the menu data, do not make up image URLs.
 - When using images in answers, use tables if you are showing multiple images in a list, to make the layout cleaner. Otherwise, try using a single image at the bottom of your answer.
+
+## New Capabilities
+- **Weather-Based Recommendations**: Use get_weather to check current weather and suggest menu items that match the conditions (e.g., refreshing items for hot days, comfort food for cold/rainy weather)
+- **Entertainment**: Use get_fun_fact to share jokes, food trivia, or interesting facts to keep users engaged while they wait for their order
+- **Nutritional Information**: Use get_nutrition_info to provide calorie and nutritional data for burger ingredients when users ask about health/dietary information
+- Proactively offer these features when relevant (e.g., "While you wait, would you like to hear a fun burger fact?")
 `;
 
 const titleSystemPrompt = `Create a title for this chat session, based on the user question. The title should be less than 32 characters. Do NOT use double-quotes. The title should be concise, descriptive, and catchy. Respond with only the title, no other text.`;

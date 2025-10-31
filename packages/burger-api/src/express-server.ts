@@ -538,6 +538,95 @@ app.get('/api/openapi', async (req: Request, res: Response) => {
   }
 });
 
+// Background worker for order state transitions (mimics Azure Functions timer)
+async function updateOrderStatuses() {
+  try {
+    const db = await DbService.getInstance();
+    const startTime = Date.now();
+    const now = new Date();
+
+    const allOrders = await db.getOrders();
+    const orders = allOrders.filter((order) =>
+      [OrderStatus.Pending, OrderStatus.InPreparation, OrderStatus.Ready].includes(order.status),
+    );
+
+    const updateTasks = [];
+    for (const order of orders) {
+      switch (order.status) {
+        case OrderStatus.Pending: {
+          const minutesSinceCreated = (now.getTime() - new Date(order.createdAt).getTime()) / 60_000;
+          if (minutesSinceCreated > 3 || (minutesSinceCreated >= 1 && Math.random() < 0.5)) {
+            updateTasks.push({
+              orderId: order.id,
+              update: { status: OrderStatus.InPreparation },
+              statusName: 'in-preparation',
+            });
+          }
+          break;
+        }
+
+        case OrderStatus.InPreparation: {
+          const estimatedCompletionAt = new Date(order.estimatedCompletionAt);
+          const diffMinutes = (now.getTime() - estimatedCompletionAt.getTime()) / 60_000;
+          if (diffMinutes > 3 || (Math.abs(diffMinutes) <= 3 && Math.random() < 0.5)) {
+            updateTasks.push({
+              orderId: order.id,
+              update: { status: OrderStatus.Ready, readyAt: now.toISOString() },
+              statusName: 'ready',
+            });
+          }
+          break;
+        }
+
+        case OrderStatus.Ready: {
+          if (order.readyAt) {
+            const readyAt = new Date(order.readyAt);
+            const minutesSinceReady = (now.getTime() - readyAt.getTime()) / 60_000;
+            if (minutesSinceReady >= 1 && (minutesSinceReady > 2 || Math.random() < 0.5)) {
+              updateTasks.push({
+                orderId: order.id,
+                update: { status: OrderStatus.Completed, completedAt: now.toISOString() },
+                statusName: 'completed',
+              });
+            }
+          }
+          break;
+        }
+        // No default
+      }
+    }
+
+    const updatePromises = updateTasks.map(async (task) => {
+      try {
+        await db.updateOrder(task.orderId, task.update);
+        return { id: task.orderId, status: task.statusName, success: true };
+      } catch (error) {
+        console.error(`ERROR: Failed to update order ${task.orderId} to ${task.statusName}:`, error);
+        return { id: task.orderId, status: task.statusName, success: false, error: error as Error };
+      }
+    });
+
+    const results = await Promise.all(updatePromises);
+
+    const updated = results.filter((r) => r.success).length;
+    const failed = results.filter((r) => !r.success).length;
+    const elapsedMs = Date.now() - startTime;
+
+    if (updated > 0 || failed > 0) {
+      console.log(`Order status updates: ${updated} orders updated, ${failed} failed (time elapsed: ${elapsedMs}ms)`);
+    }
+  } catch (error) {
+    console.error('Error in order status update worker:', error);
+  }
+}
+
+// Start the background worker (runs every 40 seconds, matching Azure Functions timer)
+const ORDER_STATUS_UPDATE_INTERVAL = 40_000; // 40 seconds
+console.log('Starting order status update background worker...');
+setInterval(updateOrderStatuses, ORDER_STATUS_UPDATE_INTERVAL);
+// Run once immediately on startup
+updateOrderStatuses();
+
 // Start server
 app.listen(PORT, () => {
   console.log(`Burger API server listening on port ${PORT}`);

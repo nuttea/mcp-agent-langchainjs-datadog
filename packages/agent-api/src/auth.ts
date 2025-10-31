@@ -1,5 +1,6 @@
 import { Buffer } from 'node:buffer';
 import { HttpRequest } from '@azure/functions';
+import type { Request } from 'express';
 import { DefaultAzureCredential, getBearerTokenProvider } from '@azure/identity';
 import { UserDbService } from './user-db-service.js';
 
@@ -19,12 +20,23 @@ export function getAzureOpenAiTokenProvider() {
   return getBearerTokenProvider(getCredentials(), azureOpenAiScope);
 }
 
-export function getAuthenticationUserId(request: HttpRequest): string | undefined {
+export function getAuthenticationUserId(request: HttpRequest | Request): string | undefined {
   let userId: string | undefined;
 
   // Get the user ID from Azure easy auth
   try {
-    const token = Buffer.from(request.headers.get('x-ms-client-principal') ?? '', 'base64').toString('ascii');
+    // Support both Azure Functions HttpRequest and Express Request
+    let principalHeader: string | undefined;
+    if ('headers' in request && typeof request.headers === 'object') {
+      // Express Request
+      principalHeader = (request as Request).get?.('x-ms-client-principal') ??
+                        (request.headers as any)['x-ms-client-principal'];
+    } else {
+      // Azure Functions HttpRequest
+      principalHeader = (request as HttpRequest).headers.get('x-ms-client-principal') ?? undefined;
+    }
+
+    const token = Buffer.from(principalHeader ?? '', 'base64').toString('ascii');
     const infos = token && JSON.parse(token);
     userId = infos?.userId;
   } catch {}
@@ -32,7 +44,7 @@ export function getAuthenticationUserId(request: HttpRequest): string | undefine
   return userId;
 }
 
-export async function getInternalUserId(request: HttpRequest, body?: any): Promise<string | undefined> {
+export async function getInternalUserId(request: HttpRequest | Request, body?: any): Promise<string | undefined> {
   const db = await UserDbService.getInstance();
 
   // Get the user ID from Azure easy auth if it's available
@@ -46,7 +58,17 @@ export async function getInternalUserId(request: HttpRequest, body?: any): Promi
   }
 
   // Get the user ID from the request body/query as a fallback
-  const providedUserId = body?.context?.userId ?? request.query.get('userId');
+  // Support both Azure Functions HttpRequest and Express Request
+  let queryUserId: string | undefined;
+  if ('query' in request && typeof request.query === 'object') {
+    // Express Request - query is a plain object
+    queryUserId = (request as Request).query.userId as string | undefined;
+  } else {
+    // Azure Functions HttpRequest - query has a get method
+    queryUserId = (request as HttpRequest).query.get('userId') ?? undefined;
+  }
+
+  const providedUserId = body?.context?.userId ?? queryUserId;
   if (providedUserId) {
     return providedUserId;
   }

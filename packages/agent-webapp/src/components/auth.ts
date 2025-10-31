@@ -192,20 +192,22 @@ export class AuthComponent extends LitElement {
 
   static override styles = css`
     :host {
-      /* Base properties */
-      --primary: var(--azc-primary, #07f);
+      /* Base properties - Datadog Theme */
+      --primary: var(--azc-primary, #632CA6); /* Datadog Purple */
+      --secondary: var(--azc-secondary, #F653A6); /* Datadog Pink */
+      --accent: var(--azc-accent, #00B9E4); /* Datadog Teal */
       --error: var(--azc-error, #e30);
-      --text-color: var(--azc-text-color, #000);
+      --text-color: var(--azc-text-color, #1E1433);
       --text-invert-color: var(--azc--text-invert-color, #fff);
       --disabled-color: var(--azc-disabled-color, #ccc);
-      --bg: var(--azc-bg, #eee);
+      --bg: var(--azc-bg, #F5F5F5);
       --space-md: var(--azc-space-md, 12px);
       --space-xl: var(--azc-space-xl, calc(var(--space-md) * 2));
       --space-xs: var(--azc-space-xs, calc(var(--space-md) / 2));
       --space-xxs: var(--azc-space-xs, calc(var(--space-md) / 4));
       --border-radius: var(--azc-border-radius, 16px);
       --focus-outline: var(--azc-focus-outline, 2px solid);
-      --overlay-color: var(--azc-overlay-color, rgba(0 0 0 / 40%));
+      --overlay-color: var(--azc-overlay-color, rgba(99, 44, 166, 0.4));
       --button-border: var(--azc-button-border, none);
       --logout-button-bg: var(--azc-logout-button-bg, transparent);
       --logout-button-bg-hover: var(--azc-logout-button-bg-hover, rgba(255 255 255 / 10%));

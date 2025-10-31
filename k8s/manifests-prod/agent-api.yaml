@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: agent-api
-  namespace: mcp-agent-dev
+  namespace: mcp-agent-prod
   labels:
     tags.datadoghq.com/env: "dev"
     tags.datadoghq.com/service: "agent-api"
@@ -10,14 +10,14 @@ metadata:
     app: mcp-agent
     service: agent-api
     component: backend-api
-    environment: dev
+    environment: prod
 spec:
   replicas: 1
   selector:
     matchLabels:
       app: mcp-agent
       service: agent-api
-      environment: dev
+      environment: prod
   template:
     metadata:
       labels:
@@ -27,7 +27,7 @@ spec:
         app: mcp-agent
         service: agent-api
         component: backend-api
-        environment: dev
+        environment: prod
       annotations:
         ad.datadoghq.com/agent-api.logs: '[{"source": "nodejs", "service": "agent-api", "log_processing_rules": [{"type": "multi_line", "name": "log_start_with_date", "pattern": "\\d{4}-(0?[1-9]|1[012])-(0?[1-9]|[12][0-9]|3[01])"}]}]'
     spec:
@@ -75,11 +75,6 @@ spec:
               key: openai-api-key
         - name: OPENAI_MODEL
           value: "gpt-4o-mini"
-        - name: DD_API_KEY
-          valueFrom:
-            secretKeyRef:
-              name: app-secrets
-              key: datadog-api-key
         resources:
           requests:
             memory: "512Mi"
@@ -104,16 +99,16 @@ apiVersion: v1
 kind: Service
 metadata:
   name: agent-api
-  namespace: mcp-agent-dev
+  namespace: mcp-agent-prod
   labels:
     app: mcp-agent
     service: agent-api
-    environment: dev
+    environment: prod
 spec:
   selector:
     app: mcp-agent
     service: agent-api
-    environment: dev
+    environment: prod
   ports:
   - port: 8080
     targetPort: 8080

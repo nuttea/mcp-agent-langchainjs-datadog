@@ -1,5 +1,7 @@
 import { ChatComponent } from '../components/chat.js';
 import { HistoryComponent } from '../components/history.js';
+import { setDatadogUser } from '../datadog-rum.js';
+import { getUserInfo } from './auth.service.js';
 
 // Chat and History components are defined in index.html
 // with their respective ids so we can access them here
@@ -28,6 +30,16 @@ export async function initUserSession() {
     if (!userId) {
       throw new Error('User not authenticated');
     }
+
+    // Get the username that the user entered during login
+    // It's stored in localStorage via auth.service.ts
+    const userInfo = await getUserInfo();
+    const userName = userInfo?.userId; // This is the username they entered
+
+    // Set user context in Datadog RUM for session tracking
+    // userId: internal hash ID from /api/me
+    // userName: the friendly name the user entered at login
+    setDatadogUser(userId, undefined, userName);
 
     // Set up user ID for chat history and chat components
     window.chatHistory.userId = userId;
