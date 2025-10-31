@@ -80,6 +80,11 @@ spec:
             secretKeyRef:
               name: app-secrets
               key: datadog-api-key
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: postgres-password
         resources:
           requests:
             memory: "512Mi"

@@ -1,0 +1,164 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: postgres-init
+  namespace: mcp-agent-dev
+spec:
+  ttlSecondsAfterFinished: 300
+  template:
+    metadata:
+      labels:
+        app: postgres-init
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: init-db
+        image: postgres:16-alpine
+        env:
+        - name: PGHOST
+          value: postgres-0.postgres.mcp-agent-dev.svc.cluster.local
+        - name: PGPORT
+          value: "5432"
+        - name: PGUSER
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: POSTGRES_USER
+        - name: PGPASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: POSTGRES_PASSWORD
+        - name: PGDATABASE
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: POSTGRES_DB
+        command:
+        - /bin/sh
+        - -c
+        - |
+          set -e
+          echo "Waiting for PostgreSQL to be ready..."
+          until pg_isready -h $PGHOST -p $PGPORT -U $PGUSER; do
+            echo "Waiting for postgres..."
+            sleep 2
+          done
+
+          echo "PostgreSQL is ready. Initializing database schema..."
+
+          cat > /tmp/init.sql << 'EOSQL'
+          -- Create users table
+          CREATE TABLE IF NOT EXISTS users (
+            id VARCHAR(255) PRIMARY KEY,
+            name VARCHAR(255),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          );
+
+          -- Create burgers table
+          CREATE TABLE IF NOT EXISTS burgers (
+            id VARCHAR(255) PRIMARY KEY,
+            name VARCHAR(255) NOT NULL,
+            description TEXT,
+            price DECIMAL(10, 2) NOT NULL,
+            image VARCHAR(500),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          );
+
+          -- Create toppings table
+          CREATE TABLE IF NOT EXISTS toppings (
+            id VARCHAR(255) PRIMARY KEY,
+            name VARCHAR(255) NOT NULL,
+            category VARCHAR(100) NOT NULL,
+            price DECIMAL(10, 2) NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          );
+
+          -- Create orders table
+          CREATE TABLE IF NOT EXISTS orders (
+            id VARCHAR(255) PRIMARY KEY,
+            user_id VARCHAR(255) NOT NULL,
+            burger_id VARCHAR(255) NOT NULL,
+            topping_ids TEXT[],
+            status VARCHAR(50) NOT NULL,
+            total DECIMAL(10, 2) NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+          );
+
+          -- Create chats table for agent conversations
+          CREATE TABLE IF NOT EXISTS chats (
+            id VARCHAR(255) PRIMARY KEY,
+            user_id VARCHAR(255) NOT NULL,
+            title VARCHAR(500),
+            messages JSONB DEFAULT '[]'::jsonb,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+          );
+
+          -- Create indexes
+          CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id);
+          CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
+          CREATE INDEX IF NOT EXISTS idx_chats_user_id ON chats(user_id);
+          CREATE INDEX IF NOT EXISTS idx_burgers_name ON burgers(name);
+          CREATE INDEX IF NOT EXISTS idx_toppings_category ON toppings(category);
+
+          -- Seed burgers data (if empty)
+          INSERT INTO burgers (id, name, description, price, image) VALUES
+            ('classic', 'Classic Burger', 'A timeless favorite with lettuce, tomato, and our special sauce', 8.99, '/images/burgers/classic.jpg'),
+            ('cheese', 'Cheese Burger', 'Classic burger topped with melted cheddar cheese', 9.99, '/images/burgers/cheese.jpg'),
+            ('bacon', 'Bacon Burger', 'Loaded with crispy bacon strips', 10.99, '/images/burgers/bacon.jpg'),
+            ('veggie', 'Veggie Burger', 'Plant-based patty with fresh vegetables', 9.49, '/images/burgers/veggie.jpg'),
+            ('deluxe', 'Deluxe Burger', 'Our signature burger with premium toppings', 12.99, '/images/burgers/deluxe.jpg')
+          ON CONFLICT (id) DO NOTHING;
+
+          -- Seed toppings data (if empty)
+          INSERT INTO toppings (id, name, category, price) VALUES
+            ('lettuce', 'Lettuce', 'vegetables', 0.50),
+            ('tomato', 'Tomato', 'vegetables', 0.50),
+            ('onion', 'Onion', 'vegetables', 0.50),
+            ('pickle', 'Pickle', 'vegetables', 0.50),
+            ('cheese', 'Cheddar Cheese', 'cheese', 1.00),
+            ('swiss', 'Swiss Cheese', 'cheese', 1.00),
+            ('bacon', 'Bacon', 'meat', 1.50),
+            ('egg', 'Fried Egg', 'special', 1.50),
+            ('avocado', 'Avocado', 'special', 2.00),
+            ('jalapeno', 'Jalapeño', 'special', 0.75),
+            ('ketchup', 'Ketchup', 'sauce', 0.00),
+            ('mustard', 'Mustard', 'sauce', 0.00),
+            ('mayo', 'Mayonnaise', 'sauce', 0.00),
+            ('bbq', 'BBQ Sauce', 'sauce', 0.50)
+          ON CONFLICT (id) DO NOTHING;
+
+          -- Create update timestamp trigger
+          CREATE OR REPLACE FUNCTION update_updated_at_column()
+          RETURNS TRIGGER AS '
+          BEGIN
+            NEW.updated_at = CURRENT_TIMESTAMP;
+            RETURN NEW;
+          END;
+          ' language 'plpgsql';
+
+          DROP TRIGGER IF EXISTS update_orders_updated_at ON orders;
+          CREATE TRIGGER update_orders_updated_at
+            BEFORE UPDATE ON orders
+            FOR EACH ROW
+            EXECUTE FUNCTION update_updated_at_column();
+
+          DROP TRIGGER IF EXISTS update_chats_updated_at ON chats;
+          CREATE TRIGGER update_chats_updated_at
+            BEFORE UPDATE ON chats
+            FOR EACH ROW
+            EXECUTE FUNCTION update_updated_at_column();
+
+          -- Note: The trigger function creation above may show escape warnings
+          -- but will still work correctly. Triggers have been manually created.
+
+          EOSQL
+
+          echo "Executing SQL initialization script..."
+          psql -f /tmp/init.sql
+
+          echo "Database initialization completed successfully!"

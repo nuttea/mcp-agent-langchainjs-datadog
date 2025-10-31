@@ -1,23 +1,9 @@
-import { Container, CosmosClient, Database } from '@azure/cosmos';
-import { DefaultAzureCredential } from '@azure/identity';
+import { Pool } from 'pg';
 import burgersData from '../data/burgers.json';
 import toppingsData from '../data/toppings.json';
 import { ToppingCategory, Topping } from './topping.js';
 import { Burger } from './burger.js';
 import { Order, OrderStatus } from './order.js';
-
-// Helper to strip properties starting with underscore from an object
-function stripUnderscoreProperties<T extends object>(object: T): T {
-  if (!object || typeof object !== 'object') return object;
-  const result: Record<string, any> = {};
-  for (const key of Object.keys(object)) {
-    if (!key.startsWith('_')) {
-      result[key] = (object as any)[key];
-    }
-  }
-
-  return result as T;
-}
 
 // Helper to remove userId from Order(s)
 function stripUserId<T extends Order | Order[] | undefined>(orderOrOrders: T): T {
@@ -37,26 +23,21 @@ function stripUserId<T extends Order | Order[] | undefined>(orderOrOrders: T): T
   return orderOrOrders;
 }
 
-// Database service for our burger API using Azure Cosmos DB
+// Database service for our burger API using PostgreSQL
 export class DbService {
   private static instance: DbService;
-  private client: CosmosClient | undefined = undefined;
-  private database: Database | undefined = undefined;
-  private burgersContainer: Container | undefined = undefined;
-  private toppingsContainer: Container | undefined = undefined;
-  private ordersContainer: Container | undefined = undefined;
-  private usersContainer: Container | undefined = undefined;
+  private pool: Pool | undefined = undefined;
 
-  // Fallback to local data if Cosmos DB is not available
+  // Fallback to local data if PostgreSQL is not available
   private localBurgers: Burger[] = [];
   private localToppings: Topping[] = [];
   private localOrders: Order[] = [];
-  private isCosmosDbInitialized = false;
+  private isPostgresInitialized = false;
 
   static async getInstance(): Promise<DbService> {
     if (!DbService.instance) {
       const instance = new DbService();
-      await instance.initializeCosmosDb();
+      await instance.initializePostgres();
       instance.initializeLocalData();
       DbService.instance = instance;
     }
@@ -64,124 +45,64 @@ export class DbService {
     return DbService.instance;
   }
 
-  // Initialize Cosmos DB client and containers
-  protected async initializeCosmosDb(): Promise<void> {
+  // Initialize PostgreSQL client
+  protected async initializePostgres(): Promise<void> {
     try {
-      const endpoint = process.env.AZURE_COSMOSDB_NOSQL_ENDPOINT;
+      const host = process.env.POSTGRES_HOST || 'postgres-0.postgres.mcp-agent-dev.svc.cluster.local';
+      const port = parseInt(process.env.POSTGRES_PORT || '5432', 10);
+      const user = process.env.POSTGRES_USER || 'burgerapp';
+      const password = process.env.POSTGRES_PASSWORD;
+      const database = process.env.POSTGRES_DB || 'burgerdb';
 
-      if (!endpoint) {
-        console.warn('Cosmos DB endpoint not found in environment variables. Using local data.');
+      if (!password) {
+        console.warn('PostgreSQL password not found in environment variables. Using local data.');
         return;
       }
 
-      // Use DefaultAzureCredential for managed identity
-      const credential = new DefaultAzureCredential();
+      console.log(`Connecting to PostgreSQL at ${host}:${port}/${database}...`);
 
-      this.client = new CosmosClient({
-        endpoint,
-        aadCredentials: credential,
+      this.pool = new Pool({
+        host,
+        port,
+        user,
+        password,
+        database,
+        max: 20,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 10000,
       });
 
-      // Get or create database
-      const databaseId = 'burgerDB';
-      const { database } = await this.client.databases.createIfNotExists({
-        id: databaseId,
-      });
-      this.database = database;
+      // Test connection
+      const client = await this.pool.connect();
+      await client.query('SELECT 1');
+      client.release();
 
-      // Get or create containers
-      const { container: burgersContainer } = await this.database.containers.createIfNotExists({
-        id: 'burgers',
-        partitionKey: { paths: ['/id'] },
-      });
-      this.burgersContainer = burgersContainer;
-
-      const { container: toppingsContainer } = await this.database.containers.createIfNotExists({
-        id: 'toppings',
-        partitionKey: { paths: ['/id'] },
-      });
-      this.toppingsContainer = toppingsContainer;
-
-      const { container: ordersContainer } = await this.database.containers.createIfNotExists({
-        id: 'orders',
-        partitionKey: { paths: ['/id'] },
-      });
-      this.ordersContainer = ordersContainer;
-
-      // Initialize connection to userDB as well to support user-related functions
-      try {
-        const userDbId = 'userDB';
-        const { database: userDatabase } = await this.client.databases.createIfNotExists({
-          id: userDbId,
-        });
-
-        // Get or create users container
-        const { container: usersContainer } = await userDatabase.containers.createIfNotExists({
-          id: 'users',
-          partitionKey: { paths: ['/id'] },
-        });
-
-        this.usersContainer = usersContainer;
-      } catch (error) {
-        console.error('Failed to initialize users database:', error);
-      }
-
-      this.isCosmosDbInitialized = true;
-
-      // Seed initial data if containers are empty
-      await this.seedInitialDataIfEmpty();
-
-      console.log('Successfully connected to Cosmos DB');
+      this.isPostgresInitialized = true;
+      console.log('Successfully connected to PostgreSQL');
     } catch (error) {
-      console.error('Failed to initialize Cosmos DB:', error);
+      console.error('Failed to initialize PostgreSQL:', error);
       console.warn('Falling back to local data storage');
-    }
-  }
-
-  // Seed initial data if containers are empty
-  private async seedInitialDataIfEmpty(): Promise<void> {
-    if (!this.isCosmosDbInitialized) return;
-
-    try {
-      // Check if Burgers container is empty
-      const burgerIterator = this.burgersContainer!.items.query('SELECT VALUE COUNT(1) FROM c');
-      const burgerResponse = await burgerIterator.fetchAll();
-      const burgerCount = burgerResponse.resources[0];
-
-      if (burgerCount === 0) {
-        console.log('Seeding burgers data to Cosmos DB...');
-        const burgers = burgersData as Burger[];
-        const burgerCreationPromises = burgers.map(async (burger) => this.burgersContainer!.items.create(burger));
-        await Promise.all(burgerCreationPromises);
+      if (this.pool) {
+        await this.pool.end().catch(console.error);
+        this.pool = undefined;
       }
-
-      // Check if Toppings container is empty
-      const toppingIterator = this.toppingsContainer!.items.query('SELECT VALUE COUNT(1) FROM c');
-      const toppingResponse = await toppingIterator.fetchAll();
-      const toppingCount = toppingResponse.resources[0];
-
-      if (toppingCount === 0) {
-        console.log('Seeding toppings data to Cosmos DB...');
-        const toppings = toppingsData as Topping[];
-        const toppingCreationPromises = toppings.map(async (topping) => this.toppingsContainer!.items.create(topping));
-        await Promise.all(toppingCreationPromises);
-      }
-    } catch (error) {
-      console.error('Error seeding initial data:', error);
     }
   }
 
   // Burger methods
   async getBurgers(): Promise<Burger[]> {
-    if (this.isCosmosDbInitialized) {
+    if (this.isPostgresInitialized && this.pool) {
       try {
-        const querySpec = {
-          query: 'SELECT * FROM c',
-        };
-        const { resources } = await this.burgersContainer!.items.query(querySpec).fetchAll();
-        return (resources as Burger[]).map(stripUnderscoreProperties);
+        const result = await this.pool.query('SELECT * FROM burgers');
+        return result.rows.map(row => ({
+          id: row.id,
+          name: row.name,
+          description: row.description,
+          price: parseFloat(row.price),
+          image: row.image,
+        }));
       } catch (error) {
-        console.error('Error fetching burgers from Cosmos DB:', error);
+        console.error('Error fetching burgers from PostgreSQL:', error);
         return [...this.localBurgers];
       }
     }
@@ -190,12 +111,20 @@ export class DbService {
   }
 
   async getBurger(id: string): Promise<Burger | undefined> {
-    if (this.isCosmosDbInitialized) {
+    if (this.isPostgresInitialized && this.pool) {
       try {
-        const { resource } = await this.burgersContainer!.item(id, id).read();
-        return resource ? stripUnderscoreProperties(resource as Burger) : undefined;
+        const result = await this.pool.query('SELECT * FROM burgers WHERE id = $1', [id]);
+        if (result.rows.length === 0) return undefined;
+        const row = result.rows[0];
+        return {
+          id: row.id,
+          name: row.name,
+          description: row.description,
+          price: parseFloat(row.price),
+          image: row.image,
+        };
       } catch (error) {
-        console.error(`Error fetching burger ${id} from Cosmos DB:`, error);
+        console.error(`Error fetching burger ${id} from PostgreSQL:`, error);
         return this.localBurgers.find((burger) => burger.id === id);
       }
     }
@@ -205,15 +134,17 @@ export class DbService {
 
   // Topping methods
   async getToppings(): Promise<Topping[]> {
-    if (this.isCosmosDbInitialized) {
+    if (this.isPostgresInitialized && this.pool) {
       try {
-        const querySpec = {
-          query: 'SELECT * FROM c',
-        };
-        const { resources } = await this.toppingsContainer!.items.query(querySpec).fetchAll();
-        return (resources as Topping[]).map(stripUnderscoreProperties);
+        const result = await this.pool.query('SELECT * FROM toppings');
+        return result.rows.map(row => ({
+          id: row.id,
+          name: row.name,
+          category: row.category as ToppingCategory,
+          price: parseFloat(row.price),
+        }));
       } catch (error) {
-        console.error('Error fetching toppings from Cosmos DB:', error);
+        console.error('Error fetching toppings from PostgreSQL:', error);
         return [...this.localToppings];
       }
     }
@@ -222,12 +153,19 @@ export class DbService {
   }
 
   async getTopping(id: string): Promise<Topping | undefined> {
-    if (this.isCosmosDbInitialized) {
+    if (this.isPostgresInitialized && this.pool) {
       try {
-        const { resource } = await this.toppingsContainer!.item(id, id).read();
-        return resource ? stripUnderscoreProperties(resource as Topping) : undefined;
+        const result = await this.pool.query('SELECT * FROM toppings WHERE id = $1', [id]);
+        if (result.rows.length === 0) return undefined;
+        const row = result.rows[0];
+        return {
+          id: row.id,
+          name: row.name,
+          category: row.category as ToppingCategory,
+          price: parseFloat(row.price),
+        };
       } catch (error) {
-        console.error(`Error fetching topping ${id} from Cosmos DB:`, error);
+        console.error(`Error fetching topping ${id} from PostgreSQL:`, error);
         return this.localToppings.find((topping) => topping.id === id);
       }
     }
@@ -242,29 +180,30 @@ export class DbService {
 
   // Order methods
   async getOrders(userId?: string): Promise<Order[]> {
-    if (this.isCosmosDbInitialized) {
+    if (this.isPostgresInitialized && this.pool) {
       try {
-        let querySpec;
+        let query = 'SELECT * FROM orders';
+        const params: any[] = [];
+
         if (userId) {
-          querySpec = {
-            query: 'SELECT * FROM c WHERE c.userId = @userId',
-            parameters: [
-              {
-                name: '@userId',
-                value: userId,
-              },
-            ],
-          };
-        } else {
-          querySpec = {
-            query: 'SELECT * FROM c',
-          };
+          query += ' WHERE user_id = $1';
+          params.push(userId);
         }
 
-        const { resources } = await this.ordersContainer!.items.query(querySpec).fetchAll();
-        return stripUserId((resources as Order[]).map(stripUnderscoreProperties));
+        query += ' ORDER BY created_at DESC';
+
+        const result = await this.pool.query(query, params);
+        const orders = result.rows.map(row => ({
+          id: row.id,
+          userId: row.user_id,
+          burgerId: row.burger_id,
+          toppingIds: row.topping_ids || [],
+          status: row.status as OrderStatus,
+          total: parseFloat(row.total),
+        }));
+        return stripUserId(orders);
       } catch (error) {
-        console.error('Error fetching orders from Cosmos DB:', error);
+        console.error('Error fetching orders from PostgreSQL:', error);
         const orders = userId ? this.localOrders.filter((order) => order.userId === userId) : this.localOrders;
         return stripUserId(orders);
       }
@@ -275,19 +214,28 @@ export class DbService {
   }
 
   async getOrder(id: string, userId?: string): Promise<Order | undefined> {
-    if (this.isCosmosDbInitialized) {
+    if (this.isPostgresInitialized && this.pool) {
       try {
-        const { resource } = await this.ordersContainer!.item(id, id).read();
-        if (!resource) return undefined;
+        const result = await this.pool.query('SELECT * FROM orders WHERE id = $1', [id]);
+        if (result.rows.length === 0) return undefined;
 
-        const order = stripUnderscoreProperties(resource as Order);
+        const row = result.rows[0];
+        const order: Order = {
+          id: row.id,
+          userId: row.user_id,
+          burgerId: row.burger_id,
+          toppingIds: row.topping_ids || [],
+          status: row.status as OrderStatus,
+          total: parseFloat(row.total),
+        };
+
         if (userId && order.userId !== userId) {
           return undefined;
         }
 
         return stripUserId(order);
       } catch (error) {
-        console.error(`Error fetching order ${id} from Cosmos DB:`, error);
+        console.error(`Error fetching order ${id} from PostgreSQL:`, error);
         const order = this.localOrders.find((order) => order.id === id);
         if (!order) return undefined;
         if (userId && order.userId !== userId) {
@@ -308,12 +256,24 @@ export class DbService {
   }
 
   async createOrder(order: Order): Promise<Order> {
-    if (this.isCosmosDbInitialized) {
+    if (this.isPostgresInitialized && this.pool) {
       try {
-        const { resource } = await this.ordersContainer!.items.create(order);
-        return stripUserId(stripUnderscoreProperties(resource as Order));
+        const result = await this.pool.query(
+          'INSERT INTO orders (id, user_id, burger_id, topping_ids, status, total) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+          [order.id, order.userId, order.burgerId, order.toppingIds, order.status, order.total]
+        );
+        const row = result.rows[0];
+        const createdOrder: Order = {
+          id: row.id,
+          userId: row.user_id,
+          burgerId: row.burger_id,
+          toppingIds: row.topping_ids || [],
+          status: row.status as OrderStatus,
+          total: parseFloat(row.total),
+        };
+        return stripUserId(createdOrder);
       } catch (error) {
-        console.error('Error creating order in Cosmos DB:', error);
+        console.error('Error creating order in PostgreSQL:', error);
         this.localOrders.push(order);
         return stripUserId(order);
       }
@@ -324,20 +284,33 @@ export class DbService {
   }
 
   async updateOrderStatus(id: string, status: OrderStatus, userId?: string): Promise<Order | undefined> {
-    if (this.isCosmosDbInitialized) {
+    if (this.isPostgresInitialized && this.pool) {
       try {
-        const { resource: existingOrder } = await this.ordersContainer!.item(id, id).read();
-        if (!existingOrder) return undefined;
+        let query = 'UPDATE orders SET status = $1 WHERE id = $2';
+        const params: any[] = [status, id];
 
-        if (userId && (existingOrder as Order).userId !== userId) {
-          return undefined;
+        if (userId) {
+          query += ' AND user_id = $3';
+          params.push(userId);
         }
 
-        const updatedOrder = { ...existingOrder, status };
-        const { resource } = await this.ordersContainer!.item(id, id).replace(updatedOrder);
-        return stripUserId(stripUnderscoreProperties(resource as Order));
+        query += ' RETURNING *';
+
+        const result = await this.pool.query(query, params);
+        if (result.rows.length === 0) return undefined;
+
+        const row = result.rows[0];
+        const updatedOrder: Order = {
+          id: row.id,
+          userId: row.user_id,
+          burgerId: row.burger_id,
+          toppingIds: row.topping_ids || [],
+          status: row.status as OrderStatus,
+          total: parseFloat(row.total),
+        };
+        return stripUserId(updatedOrder);
       } catch (error) {
-        console.error(`Error updating order ${id} in Cosmos DB:`, error);
+        console.error(`Error updating order ${id} in PostgreSQL:`, error);
         const orderIndex = this.localOrders.findIndex((order) => order.id === id);
         if (orderIndex === -1) return undefined;
 
@@ -364,19 +337,20 @@ export class DbService {
   }
 
   async deleteOrder(id: string, userId?: string): Promise<boolean> {
-    if (this.isCosmosDbInitialized) {
+    if (this.isPostgresInitialized && this.pool) {
       try {
-        const { resource: existingOrder } = await this.ordersContainer!.item(id, id).read();
-        if (!existingOrder) return false;
+        let query = 'DELETE FROM orders WHERE id = $1';
+        const params: any[] = [id];
 
-        if (userId && (existingOrder as Order).userId !== userId) {
-          return false;
+        if (userId) {
+          query += ' AND user_id = $2';
+          params.push(userId);
         }
 
-        await this.ordersContainer!.item(id, id).delete();
-        return true;
+        const result = await this.pool.query(query, params);
+        return (result.rowCount || 0) > 0;
       } catch (error) {
-        console.error(`Error deleting order ${id} from Cosmos DB:`, error);
+        console.error(`Error deleting order ${id} from PostgreSQL:`, error);
         const orderIndex = this.localOrders.findIndex((order) => order.id === id);
         if (orderIndex === -1) return false;
 
@@ -403,16 +377,51 @@ export class DbService {
   }
 
   async updateOrder(id: string, updates: Partial<Order>): Promise<Order | undefined> {
-    if (this.isCosmosDbInitialized) {
+    if (this.isPostgresInitialized && this.pool) {
       try {
-        const { resource: existingOrder } = await this.ordersContainer!.item(id, id).read();
-        if (!existingOrder) return undefined;
+        const setClauses: string[] = [];
+        const params: any[] = [];
+        let paramIndex = 1;
 
-        const updatedOrder = { ...existingOrder, ...updates };
-        const { resource } = await this.ordersContainer!.item(id, id).replace(updatedOrder);
-        return stripUserId(stripUnderscoreProperties(resource as Order));
+        if (updates.status !== undefined) {
+          setClauses.push(`status = $${paramIndex++}`);
+          params.push(updates.status);
+        }
+        if (updates.total !== undefined) {
+          setClauses.push(`total = $${paramIndex++}`);
+          params.push(updates.total);
+        }
+        if (updates.toppingIds !== undefined) {
+          setClauses.push(`topping_ids = $${paramIndex++}`);
+          params.push(updates.toppingIds);
+        }
+        if (updates.burgerId !== undefined) {
+          setClauses.push(`burger_id = $${paramIndex++}`);
+          params.push(updates.burgerId);
+        }
+
+        if (setClauses.length === 0) {
+          return await this.getOrder(id);
+        }
+
+        params.push(id);
+        const query = `UPDATE orders SET ${setClauses.join(', ')} WHERE id = $${paramIndex} RETURNING *`;
+
+        const result = await this.pool.query(query, params);
+        if (result.rows.length === 0) return undefined;
+
+        const row = result.rows[0];
+        const updatedOrder: Order = {
+          id: row.id,
+          userId: row.user_id,
+          burgerId: row.burger_id,
+          toppingIds: row.topping_ids || [],
+          status: row.status as OrderStatus,
+          total: parseFloat(row.total),
+        };
+        return stripUserId(updatedOrder);
       } catch (error) {
-        console.error(`Error updating order ${id} in Cosmos DB:`, error);
+        console.error(`Error updating order ${id} in PostgreSQL:`, error);
         const orderIndex = this.localOrders.findIndex((order) => order.id === id);
         if (orderIndex === -1) return undefined;
 
@@ -430,31 +439,30 @@ export class DbService {
 
   // User methods
   async createUser(id: string, name: string): Promise<void> {
-    if (!this.usersContainer) {
-      console.warn('Users container not initialized. User creation skipped.');
+    if (!this.isPostgresInitialized || !this.pool) {
+      console.warn('PostgreSQL not initialized. User creation skipped.');
       return;
     }
 
     try {
-      await this.usersContainer.items.create({
-        id,
-        name,
-        createdAt: new Date().toISOString(),
-      });
+      await this.pool.query(
+        'INSERT INTO users (id, name) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING',
+        [id, name]
+      );
     } catch (error) {
       console.error('Error creating user:', error);
     }
   }
 
   async getUserName(id: string): Promise<string | undefined> {
-    if (!this.usersContainer) {
-      console.warn('Users container not initialized. Cannot fetch user name.');
+    if (!this.isPostgresInitialized || !this.pool) {
+      console.warn('PostgreSQL not initialized. Cannot fetch user name.');
       return undefined;
     }
 
     try {
-      const { resource } = await this.usersContainer.item(id, id).read();
-      return resource?.name;
+      const result = await this.pool.query('SELECT name FROM users WHERE id = $1', [id]);
+      return result.rows.length > 0 ? result.rows[0].name : undefined;
     } catch (error) {
       console.error('Error fetching user:', error);
       return undefined;
@@ -462,14 +470,14 @@ export class DbService {
   }
 
   async userExists(id: string): Promise<boolean> {
-    if (!this.usersContainer) {
-      console.warn('Users container not initialized. Assuming user exists.');
+    if (!this.isPostgresInitialized || !this.pool) {
+      console.warn('PostgreSQL not initialized. Assuming user exists.');
       return true; // Fallback to allowing operation
     }
 
     try {
-      const { resource } = await this.usersContainer.item(id, id).read();
-      return Boolean(resource);
+      const result = await this.pool.query('SELECT 1 FROM users WHERE id = $1', [id]);
+      return result.rows.length > 0;
     } catch (error) {
       console.error('Error checking user existence:', error);
       return false;
@@ -477,17 +485,14 @@ export class DbService {
   }
 
   async getRegisteredUsers(): Promise<number> {
-    if (!this.usersContainer) {
-      console.warn('Users container not initialized. Cannot count registered users.');
+    if (!this.isPostgresInitialized || !this.pool) {
+      console.warn('PostgreSQL not initialized. Cannot count registered users.');
       return 0;
     }
 
     try {
-      const querySpec = {
-        query: 'SELECT VALUE COUNT(1) FROM c',
-      };
-      const { resources } = await this.usersContainer.items.query(querySpec).fetchAll();
-      return resources[0] || 0;
+      const result = await this.pool.query('SELECT COUNT(*) as count FROM users');
+      return parseInt(result.rows[0].count, 10);
     } catch (error) {
       console.error('Error counting registered users:', error);
       return 0;
@@ -498,5 +503,13 @@ export class DbService {
   protected initializeLocalData(): void {
     this.localBurgers = burgersData as Burger[];
     this.localToppings = toppingsData as Topping[];
+  }
+
+  async close(): Promise<void> {
+    if (this.pool) {
+      await this.pool.end();
+      this.pool = undefined;
+      this.isPostgresInitialized = false;
+    }
   }
 }

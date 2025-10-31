@@ -10,13 +10,13 @@ import { Readable } from 'node:stream';
 import { randomUUID } from 'node:crypto';
 import { createAgent, AIMessage, HumanMessage } from 'langchain';
 import { ChatOpenAI } from '@langchain/openai';
-import { AzureCosmsosDBNoSQLChatMessageHistory } from '@langchain/azure-cosmosdb';
 import { loadMcpTools } from '@langchain/mcp-adapters';
-import { StreamEvent } from '@langchain/core/dist/tracers/log_stream.js';
+import { StreamEvent } from '@langchain/core/tracers/log_stream';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { UserDbService } from './user-db-service.js';
-import { getAuthenticationUserId, getAzureOpenAiTokenProvider, getCredentials, getInternalUserId } from './auth.js';
+import { PostgresChatMessageHistory } from './postgres-chat-history.js';
+import { getAuthenticationUserId, getAzureOpenAiTokenProvider, getInternalUserId } from './auth.js';
 import { type AIChatCompletionRequest, type AIChatCompletionDelta } from './models.js';
 import { logger } from './logger.js';
 
@@ -114,7 +114,6 @@ app.get('/api/me', async (req, res) => {
 
 // Handler for getting chats - implements the same logic as chats-get Azure Function
 const getChatsHandler = async (req: express.Request, res: express.Response) => {
-  const azureCosmosDbEndpoint = process.env.AZURE_COSMOSDB_NOSQL_ENDPOINT;
   const { sessionId } = req.params;
   const userId = await getInternalUserId(req as any);
 
@@ -124,9 +123,12 @@ const getChatsHandler = async (req: express.Request, res: express.Response) => {
   }
 
   try {
-    if (!azureCosmosDbEndpoint) {
-      // Return empty results when Cosmos DB is not configured (for development/K8s)
-      console.log('Cosmos DB not configured, returning empty chat history');
+    const userDb = await UserDbService.getInstance();
+    const pool = userDb.getPool();
+
+    if (!pool) {
+      // Return empty results when PostgreSQL is not configured (for development)
+      console.log('PostgreSQL not configured, returning empty chat history');
       if (sessionId) {
         res.json([]); // Empty messages array
       } else {
@@ -135,21 +137,17 @@ const getChatsHandler = async (req: express.Request, res: express.Response) => {
       return;
     }
 
-    const credentials = getCredentials();
-
     if (sessionId) {
       // Get messages for a specific session
-      const chatHistory = new AzureCosmsosDBNoSQLChatMessageHistory({
+      const chatHistory = new PostgresChatMessageHistory({
         sessionId,
         userId,
-        credentials,
-        containerName: 'history',
-        databaseName: 'historyDB',
+        pool,
       });
 
       const messages = await chatHistory.getMessages();
-      const chatMessages = messages.map((message) => ({
-        role: message.getType() === 'human' ? 'user' : 'assistant',
+      const chatMessages = messages.map((message: any) => ({
+        role: message._getType() === 'human' ? 'user' : 'assistant',
         content: message.content,
       }));
       res.json(chatMessages);
@@ -157,18 +155,16 @@ const getChatsHandler = async (req: express.Request, res: express.Response) => {
     }
 
     // Get all sessions (sessionId is undefined)
-    const chatHistory = new AzureCosmsosDBNoSQLChatMessageHistory({
-      sessionId: undefined as any, // getAllSessions works without a sessionId
+    const chatHistory = new PostgresChatMessageHistory({
+      sessionId: '', // Not needed for getAllSessions
       userId,
-      credentials,
-      containerName: 'history',
-      databaseName: 'historyDB',
+      pool,
     });
 
     const sessions = await chatHistory.getAllSessions();
-    const chatSessions = sessions.map((session) => ({
+    const chatSessions = sessions.map((session: any) => ({
       id: session.id,
-      title: session.context?.title,
+      title: session.title,
     }));
     res.json(chatSessions);
   } catch (error: any) {
@@ -345,23 +341,22 @@ app.post('/api/chats/stream', async (req, res) => {
         streaming: true,
       });
     }
-    // Initialize chat history if Cosmos DB is configured
-    const azureCosmosDbEndpoint = process.env.AZURE_COSMOSDB_NOSQL_ENDPOINT;
-    let chatHistory: AzureCosmsosDBNoSQLChatMessageHistory | null = null;
+    // Initialize chat history if PostgreSQL is configured
+    const userDb = await UserDbService.getInstance();
+    const pool = userDb.getPool();
+    let chatHistory: PostgresChatMessageHistory | null = null;
     let previousMessages: any[] = [];
 
-    if (azureCosmosDbEndpoint) {
-      chatHistory = new AzureCosmsosDBNoSQLChatMessageHistory({
+    if (pool) {
+      chatHistory = new PostgresChatMessageHistory({
         sessionId,
         userId,
-        credentials: getCredentials(),
-        containerName: 'history',
-        databaseName: 'historyDB',
+        pool,
       });
       previousMessages = await chatHistory.getMessages();
       console.log(`Previous messages in history: ${previousMessages.length}`);
     } else {
-      console.log('Cosmos DB not configured, chat history will not be persisted');
+      console.log('PostgreSQL not configured, chat history will not be persisted');
     }
 
     const client = new Client({
@@ -446,7 +441,6 @@ app.post('/api/chats/stream', async (req, res) => {
 
 // Delete chat session - implements the same logic as chats-delete Azure Function
 app.delete('/api/chats/:sessionId', async (req, res) => {
-  const azureCosmosDbEndpoint = process.env.AZURE_COSMOSDB_NOSQL_ENDPOINT;
   const { sessionId } = req.params;
   const userId = await getInternalUserId(req as any);
 
@@ -461,20 +455,20 @@ app.delete('/api/chats/:sessionId', async (req, res) => {
   }
 
   try {
-    if (!azureCosmosDbEndpoint) {
-      const errorMessage = 'Missing required environment variable: AZURE_COSMOSDB_NOSQL_ENDPOINT';
+    const userDb = await UserDbService.getInstance();
+    const pool = userDb.getPool();
+
+    if (!pool) {
+      const errorMessage = 'PostgreSQL not configured';
       logger.error({ userId, sessionId }, errorMessage);
       res.status(500).json({ error: errorMessage });
       return;
     }
 
-    const credentials = getCredentials();
-    const chatHistory = new AzureCosmsosDBNoSQLChatMessageHistory({
+    const chatHistory = new PostgresChatMessageHistory({
       sessionId,
       userId,
-      credentials,
-      containerName: 'history',
-      databaseName: 'historyDB',
+      pool,
     });
 
     await chatHistory.clear();

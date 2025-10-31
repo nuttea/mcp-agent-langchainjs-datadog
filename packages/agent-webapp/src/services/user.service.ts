@@ -14,10 +14,25 @@ declare global {
 
 let userIdPromise: Promise<string | undefined> | undefined;
 
+export function clearUserSession() {
+  // Clear the cached user ID promise so next getUserId() will fetch fresh data
+  userIdPromise = undefined;
+}
+
 export async function getUserId(refresh = false): Promise<string | undefined> {
   if (!refresh && userIdPromise) return userIdPromise;
   userIdPromise = (async () => {
-    const response = await fetch(`/api/me`);
+    // Get the username from localStorage (set during login)
+    const userInfo = await getUserInfo();
+    const username = userInfo?.userId;
+
+    const headers: HeadersInit = { 'Content-Type': 'application/json' };
+    if (username) {
+      // Send the username in x-user-id header so backend can hash it
+      headers['x-user-id'] = username;
+    }
+
+    const response = await fetch(`/api/me`, { headers });
     const payload = await response.json();
     return payload?.id;
   })();
@@ -26,7 +41,8 @@ export async function getUserId(refresh = false): Promise<string | undefined> {
 
 export async function initUserSession() {
   try {
-    const userId = await getUserId();
+    // Force refresh to get the current user's ID (not cached from previous user)
+    const userId = await getUserId(true);
     if (!userId) {
       throw new Error('User not authenticated');
     }

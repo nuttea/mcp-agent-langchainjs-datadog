@@ -1,52 +1,65 @@
 import process from 'node:process';
-import { CosmosClient, Database, Container } from '@azure/cosmos';
-import { DefaultAzureCredential } from '@azure/identity';
+import { Pool } from 'pg';
 
 export class UserDbService {
   private static instance: UserDbService;
-  private client: CosmosClient | undefined = undefined;
-  private database: Database | undefined = undefined;
-  private usersContainer: Container | undefined = undefined;
-  private isCosmosDbInitialized = false;
+  private pool: Pool | undefined = undefined;
   private readonly inMemoryStorage = new Map<string, any>();
   private useInMemoryStorage = true; // Default to in-memory storage
+  private isPostgresInitialized = false;
 
   static async getInstance(): Promise<UserDbService> {
     if (!UserDbService.instance) {
       const instance = new UserDbService();
-      await instance.initializeCosmosDb();
+      await instance.initializePostgres();
       UserDbService.instance = instance;
     }
 
     return UserDbService.instance;
   }
 
-  protected async initializeCosmosDb(): Promise<void> {
+  protected async initializePostgres(): Promise<void> {
     try {
-      const endpoint = process.env.AZURE_COSMOSDB_NOSQL_ENDPOINT;
-      if (!endpoint) {
-        console.log('Cosmos DB endpoint not configured. Using in-memory storage for users.');
+      const host = process.env.POSTGRES_HOST || 'postgres-0.postgres.mcp-agent-dev.svc.cluster.local';
+      const port = parseInt(process.env.POSTGRES_PORT || '5432', 10);
+      const user = process.env.POSTGRES_USER || 'burgerapp';
+      const password = process.env.POSTGRES_PASSWORD;
+      const database = process.env.POSTGRES_DB || 'burgerdb';
+
+      if (!password) {
+        console.log('PostgreSQL password not configured. Using in-memory storage for users.');
         this.useInMemoryStorage = true;
         return;
       }
 
-      console.log('Attempting to connect to Cosmos DB for users...');
-      const credential = new DefaultAzureCredential();
-      this.client = new CosmosClient({ endpoint, aadCredentials: credential });
-      const databaseId = 'userDB';
-      const { database } = await this.client.databases.createIfNotExists({ id: databaseId });
-      this.database = database;
-      const { container } = await this.database.containers.createIfNotExists({
-        id: 'users',
-        partitionKey: { paths: ['/id'] },
+      console.log(`Attempting to connect to PostgreSQL at ${host}:${port}/${database}...`);
+
+      this.pool = new Pool({
+        host,
+        port,
+        user,
+        password,
+        database,
+        max: 20,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 10000,
       });
-      this.usersContainer = container;
-      this.isCosmosDbInitialized = true;
-      this.useInMemoryStorage = false; // Switch to Cosmos DB if connection succeeds
-      console.log('Successfully connected to Cosmos DB for users');
+
+      // Test the connection
+      const client = await this.pool.connect();
+      await client.query('SELECT 1');
+      client.release();
+
+      this.isPostgresInitialized = true;
+      this.useInMemoryStorage = false;
+      console.log('Successfully connected to PostgreSQL for users');
     } catch (error) {
-      console.warn('Failed to initialize Cosmos DB for users. Falling back to in-memory storage.', error);
+      console.warn('Failed to initialize PostgreSQL for users. Falling back to in-memory storage.', error);
       this.useInMemoryStorage = true;
+      if (this.pool) {
+        await this.pool.end().catch(console.error);
+        this.pool = undefined;
+      }
     }
   }
 
@@ -55,19 +68,31 @@ export class UserDbService {
       return this.inMemoryStorage.get(id);
     }
 
-    if (!this.isCosmosDbInitialized) return undefined;
+    if (!this.isPostgresInitialized || !this.pool) return undefined;
+
     try {
-      const { resource } = await this.usersContainer!.item(id, id).read();
-      return resource;
+      const result = await this.pool.query(
+        'SELECT * FROM users WHERE id = $1',
+        [id]
+      );
+
+      if (result.rows.length === 0) return undefined;
+
+      return {
+        id: result.rows[0].id,
+        name: result.rows[0].name,
+        createdAt: result.rows[0].created_at,
+      };
     } catch (error: any) {
-      if (error.code === 404) return undefined;
+      console.error('Error fetching user from PostgreSQL:', error);
       throw error;
     }
   }
 
-  async createUser(id: string): Promise<any> {
+  async createUser(id: string, name?: string): Promise<any> {
     const user = {
       id,
+      name: name || id,
       createdAt: new Date().toISOString(),
     };
 
@@ -77,14 +102,48 @@ export class UserDbService {
       return user;
     }
 
-    if (!this.isCosmosDbInitialized) {
-      console.warn('Cosmos DB not initialized, falling back to in-memory storage');
+    if (!this.isPostgresInitialized || !this.pool) {
+      console.warn('PostgreSQL not initialized, falling back to in-memory storage');
       this.inMemoryStorage.set(id, user);
       return user;
     }
 
-    const { resource } = await this.usersContainer!.items.create(user);
-    console.log(`Created user ${id} in Cosmos DB`);
-    return resource;
+    try {
+      const result = await this.pool.query(
+        'INSERT INTO users (id, name, created_at) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING RETURNING *',
+        [id, user.name, new Date()]
+      );
+
+      if (result.rows.length > 0) {
+        console.log(`Created user ${id} in PostgreSQL`);
+        return {
+          id: result.rows[0].id,
+          name: result.rows[0].name,
+          createdAt: result.rows[0].created_at,
+        };
+      } else {
+        // User already exists
+        return await this.getUserById(id);
+      }
+    } catch (error) {
+      console.error('Error creating user in PostgreSQL:', error);
+      throw error;
+    }
+  }
+
+  getPool(): Pool | undefined {
+    return this.pool;
+  }
+
+  isInitialized(): boolean {
+    return this.isPostgresInitialized;
+  }
+
+  async close(): Promise<void> {
+    if (this.pool) {
+      await this.pool.end();
+      this.pool = undefined;
+      this.isPostgresInitialized = false;
+    }
   }
 }

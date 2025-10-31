@@ -3,6 +3,7 @@ import './datadog-rum.js';
 
 export * from './services/api.service.js';
 export * from './services/user.service.js';
+export { clearUserSession } from './services/user.service.js';
 export * from './components/auth.js';
 export * from './components/chat.js';
 export * from './components/user-card.js';

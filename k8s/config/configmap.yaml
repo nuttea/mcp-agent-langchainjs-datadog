@@ -26,6 +26,12 @@ data:
   NODE_ENV: "production"
   LOG_LEVEL: "info"
 
+  # PostgreSQL Configuration
+  POSTGRES_HOST: "postgres-0.postgres.mcp-agent-dev.svc.cluster.local"
+  POSTGRES_PORT: "5432"
+  POSTGRES_USER: "burgerapp"
+  POSTGRES_DB: "burgerdb"
+
   # Datadog Configuration
   DD_ENV: "dev"
   DD_SERVICE: "agent-api"

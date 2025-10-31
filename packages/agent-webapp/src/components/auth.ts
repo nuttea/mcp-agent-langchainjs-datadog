@@ -2,6 +2,7 @@ import { LitElement, css, html, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import { getUserInfo, AuthDetails, setUserId, clearUserId } from '../services/auth.service.js';
+import { clearUserSession } from '../services/user.service.js';
 import personSvg from '../../assets/icons/person.svg?raw';
 import logoutSvg from '../../assets/icons/logout.svg?raw';
 import microsoftSvg from '../../assets/providers/microsoft.svg?inline';
@@ -97,13 +98,18 @@ export class AuthComponent extends LitElement {
       this._userDetails = await getUserInfo(true);
       this._userIdInput = '';
       this.requestUpdate();
+      // Dispatch custom event to notify other auth components
+      window.dispatchEvent(new CustomEvent('auth-state-changed', { detail: { userDetails: this._userDetails } }));
     }
   }
 
   async onLogoutClicked() {
     clearUserId();
+    clearUserSession(); // Clear cached user ID so next login gets fresh data
     this._userDetails = undefined;
     this.requestUpdate();
+    // Dispatch custom event to notify other auth components
+    window.dispatchEvent(new CustomEvent('auth-state-changed', { detail: { userDetails: undefined } }));
   }
 
   protected renderStatus = () =>
@@ -158,7 +164,21 @@ export class AuthComponent extends LitElement {
     const userDetails = await getUserInfo();
     this._userDetails = userDetails;
     this.loaded = true;
+
+    // Listen for auth state changes from other auth components
+    window.addEventListener('auth-state-changed', this.handleAuthStateChanged);
   }
+
+  override disconnectedCallback() {
+    super.disconnectedCallback();
+    window.removeEventListener('auth-state-changed', this.handleAuthStateChanged);
+  }
+
+  private handleAuthStateChanged = (event: Event) => {
+    const customEvent = event as CustomEvent;
+    this._userDetails = customEvent.detail.userDetails;
+    this.requestUpdate();
+  };
 
   protected override updated(changedProperties: Map<string | number | symbol, unknown>) {
     super.updated(changedProperties);

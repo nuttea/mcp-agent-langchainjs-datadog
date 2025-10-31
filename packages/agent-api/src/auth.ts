@@ -23,7 +23,23 @@ export function getAzureOpenAiTokenProvider() {
 export function getAuthenticationUserId(request: HttpRequest | Request): string | undefined {
   let userId: string | undefined;
 
-  // Get the user ID from Azure easy auth
+  // First, check for simple x-user-id header (for non-Azure deployments)
+  try {
+    if ('headers' in request && typeof request.headers === 'object') {
+      // Express Request
+      userId = (request as Request).get?.('x-user-id') ??
+               (request.headers as any)['x-user-id'];
+    } else {
+      // Azure Functions HttpRequest
+      userId = (request as HttpRequest).headers.get('x-user-id') ?? undefined;
+    }
+
+    if (userId) {
+      return userId;
+    }
+  } catch {}
+
+  // Fall back to Azure easy auth
   try {
     // Support both Azure Functions HttpRequest and Express Request
     let principalHeader: string | undefined;
