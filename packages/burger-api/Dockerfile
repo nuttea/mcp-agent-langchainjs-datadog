@@ -15,6 +15,9 @@ COPY packages/burger-api/package*.json ./packages/burger-api/
 # Install all dependencies (including workspace)
 RUN npm ci --workspace=burger-api --include-workspace-root
 
+# Install missing runtime dependencies that aren't being installed by workspace
+RUN npm install express@^4.18.2 cors@^2.8.5
+
 # Copy source code
 COPY packages/burger-api ./packages/burger-api
 
