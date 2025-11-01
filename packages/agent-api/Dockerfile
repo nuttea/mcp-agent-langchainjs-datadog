@@ -40,7 +40,7 @@ WORKDIR /app
 
 # Copy installed dependencies from previous stage
 COPY --from=dependencies /app/node_modules ./node_modules
-COPY --from=dependencies /app/packages/agent-api/node_modules ./packages/agent-api/node_modules
+COPY --from=dependencies /app/packages ./packages
 
 # Copy source code (these change frequently, so copy after deps)
 COPY package*.json ./

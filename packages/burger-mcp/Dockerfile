@@ -24,11 +24,11 @@ FROM base AS builder
 
 WORKDIR /app
 
-# Copy dependencies from previous stage
+# Copy installed node_modules from dependencies stage
 COPY --from=dependencies /app/node_modules ./node_modules
-COPY --from=dependencies /app/packages/burger-mcp/node_modules ./packages/burger-mcp/node_modules
+COPY --from=dependencies /app/packages ./packages
 
-# Copy source code
+# Copy source code (will overwrite package.json but node_modules are preserved)
 COPY package*.json ./
 COPY packages/burger-mcp ./packages/burger-mcp
 

@@ -25,7 +25,7 @@ WORKDIR /app
 
 # Copy dependencies from previous stage
 COPY --from=dependencies /app/node_modules ./node_modules
-COPY --from=dependencies /app/packages/agent-webapp/node_modules ./packages/agent-webapp/node_modules
+COPY --from=dependencies /app/packages ./packages
 
 # Copy source code
 COPY package*.json ./
