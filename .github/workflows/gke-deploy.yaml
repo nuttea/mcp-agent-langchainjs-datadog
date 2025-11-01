@@ -319,6 +319,26 @@ jobs:
             gcr.io/${{ env.GCP_PROJECT_ID }}/burger-mcp=${IMAGE_BASE}/burger-mcp:${SHORT_SHA} \
             gcr.io/${{ env.GCP_PROJECT_ID }}/burger-webapp=${IMAGE_BASE}/burger-webapp:${SHORT_SHA}
 
+      - name: Update Datadog UST version labels
+        if: steps.should-deploy.outputs.should_deploy == 'true'
+        run: |
+          SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
+          ENV=${{ matrix.environment }}
+
+          echo "Updating Datadog UST version labels to ${SHORT_SHA}"
+
+          # Update version-labels.yaml patch with the commit SHA
+          # Replace the default version placeholder with actual commit SHA
+          sed -i.bak "s/version: ${ENV}-local/version: ${SHORT_SHA}/g" \
+            k8s/overlays/${ENV}/patches/version-labels.yaml
+
+          # Also update VERSION environment variable value
+          sed -i.bak "s/value: ${ENV}-local/value: ${SHORT_SHA}/g" \
+            k8s/overlays/${ENV}/patches/version-labels.yaml
+
+          echo "Updated version labels:"
+          grep -E "version:|value:" k8s/overlays/${ENV}/patches/version-labels.yaml | head -10
+
       - name: Deploy with Canary Strategy
         if: steps.should-deploy.outputs.should_deploy == 'true'
         run: |

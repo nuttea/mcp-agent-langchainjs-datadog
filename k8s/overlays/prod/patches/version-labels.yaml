@@ -1,0 +1,103 @@
+# Patch to add Datadog Unified Service Tagging (UST) version labels
+# This file will be updated by CI/CD with the actual commit SHA
+# For local development, it defaults to "prod-local"
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-api
+  labels:
+    tags.datadoghq.com/env: prod
+    tags.datadoghq.com/version: prod-local
+spec:
+  template:
+    metadata:
+      labels:
+        tags.datadoghq.com/env: prod
+        tags.datadoghq.com/version: prod-local
+    spec:
+      containers:
+      - name: agent-api
+        env:
+        - name: VERSION
+          value: prod-local
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-webapp
+  labels:
+    tags.datadoghq.com/env: prod
+    tags.datadoghq.com/version: prod-local
+spec:
+  template:
+    metadata:
+      labels:
+        tags.datadoghq.com/env: prod
+        tags.datadoghq.com/version: prod-local
+    spec:
+      containers:
+      - name: agent-webapp
+        env:
+        - name: VERSION
+          value: prod-local
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: burger-api
+  labels:
+    tags.datadoghq.com/env: prod
+    tags.datadoghq.com/version: prod-local
+spec:
+  template:
+    metadata:
+      labels:
+        tags.datadoghq.com/env: prod
+        tags.datadoghq.com/version: prod-local
+    spec:
+      containers:
+      - name: burger-api
+        env:
+        - name: VERSION
+          value: prod-local
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: burger-mcp
+  labels:
+    tags.datadoghq.com/env: prod
+    tags.datadoghq.com/version: prod-local
+spec:
+  template:
+    metadata:
+      labels:
+        tags.datadoghq.com/env: prod
+        tags.datadoghq.com/version: prod-local
+    spec:
+      containers:
+      - name: burger-mcp
+        env:
+        - name: VERSION
+          value: prod-local
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: burger-webapp
+  labels:
+    tags.datadoghq.com/env: prod
+    tags.datadoghq.com/version: prod-local
+spec:
+  template:
+    metadata:
+      labels:
+        tags.datadoghq.com/env: prod
+        tags.datadoghq.com/version: prod-local
+    spec:
+      containers:
+      - name: burger-webapp
+        env:
+        - name: VERSION
+          value: prod-local

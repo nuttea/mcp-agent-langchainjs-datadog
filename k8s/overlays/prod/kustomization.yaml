@@ -35,3 +35,4 @@ patches:
   - path: patches/configmap.yaml
   - path: patches/resources.yaml
   - path: patches/hpa.yaml
+  - path: patches/version-labels.yaml
