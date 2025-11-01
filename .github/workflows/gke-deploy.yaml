@@ -40,17 +40,32 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       packages: ${{ steps.filter.outputs.changes }}
-      agent-api: ${{ steps.filter.outputs.agent-api }}
-      agent-webapp: ${{ steps.filter.outputs.agent-webapp }}
-      burger-api: ${{ steps.filter.outputs.burger-api }}
-      burger-mcp: ${{ steps.filter.outputs.burger-mcp }}
-      burger-webapp: ${{ steps.filter.outputs.burger-webapp }}
-      any-changed: ${{ steps.check.outputs.any-changed }}
+      agent-api: ${{ steps.check-force.outputs.agent-api }}
+      agent-webapp: ${{ steps.check-force.outputs.agent-webapp }}
+      burger-api: ${{ steps.check-force.outputs.burger-api }}
+      burger-mcp: ${{ steps.check-force.outputs.burger-mcp }}
+      burger-webapp: ${{ steps.check-force.outputs.burger-webapp }}
+      any-changed: ${{ steps.check-force.outputs.any-changed }}
+      force-build: ${{ steps.check-force.outputs.force-build }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0  # Fetch all history for proper diff
+
+      - name: Check for force build keywords
+        id: check-keywords
+        run: |
+          COMMIT_MSG="${{ github.event.head_commit.message }}"
+          FORCE_BUILD="false"
+
+          # Check for force build keywords in commit message
+          if echo "${COMMIT_MSG}" | grep -iE '\[force.build\]|\[rebuild.all\]|\[build.all\]'; then
+            FORCE_BUILD="true"
+            echo "🔨 Force build detected in commit message!"
+          fi
+
+          echo "force_build=${FORCE_BUILD}" >> $GITHUB_OUTPUT
 
       - name: Check for package changes
         uses: dorny/paths-filter@v3
@@ -68,17 +83,40 @@ jobs:
             burger-webapp:
               - 'packages/burger-webapp/**'
 
-      - name: Check if any package changed
-        id: check
+      - name: Check if any package changed or force build
+        id: check-force
         run: |
-          if [[ "${{ steps.filter.outputs.agent-api }}" == "true" ]] || \
-             [[ "${{ steps.filter.outputs.agent-webapp }}" == "true" ]] || \
-             [[ "${{ steps.filter.outputs.burger-api }}" == "true" ]] || \
-             [[ "${{ steps.filter.outputs.burger-mcp }}" == "true" ]] || \
-             [[ "${{ steps.filter.outputs.burger-webapp }}" == "true" ]]; then
+          FORCE="${{ steps.check-keywords.outputs.force_build }}"
+
+          # If force build, mark all packages as changed
+          if [[ "${FORCE}" == "true" ]]; then
+            echo "🔨 FORCE BUILD: Building all packages"
+            echo "agent-api=true" >> $GITHUB_OUTPUT
+            echo "agent-webapp=true" >> $GITHUB_OUTPUT
+            echo "burger-api=true" >> $GITHUB_OUTPUT
+            echo "burger-mcp=true" >> $GITHUB_OUTPUT
+            echo "burger-webapp=true" >> $GITHUB_OUTPUT
             echo "any-changed=true" >> $GITHUB_OUTPUT
+            echo "force-build=true" >> $GITHUB_OUTPUT
           else
-            echo "any-changed=false" >> $GITHUB_OUTPUT
+            # Use actual change detection
+            echo "agent-api=${{ steps.filter.outputs.agent-api }}" >> $GITHUB_OUTPUT
+            echo "agent-webapp=${{ steps.filter.outputs.agent-webapp }}" >> $GITHUB_OUTPUT
+            echo "burger-api=${{ steps.filter.outputs.burger-api }}" >> $GITHUB_OUTPUT
+            echo "burger-mcp=${{ steps.filter.outputs.burger-mcp }}" >> $GITHUB_OUTPUT
+            echo "burger-webapp=${{ steps.filter.outputs.burger-webapp }}" >> $GITHUB_OUTPUT
+            echo "force-build=false" >> $GITHUB_OUTPUT
+
+            # Check if any package actually changed
+            if [[ "${{ steps.filter.outputs.agent-api }}" == "true" ]] || \
+               [[ "${{ steps.filter.outputs.agent-webapp }}" == "true" ]] || \
+               [[ "${{ steps.filter.outputs.burger-api }}" == "true" ]] || \
+               [[ "${{ steps.filter.outputs.burger-mcp }}" == "true" ]] || \
+               [[ "${{ steps.filter.outputs.burger-webapp }}" == "true" ]]; then
+              echo "any-changed=true" >> $GITHUB_OUTPUT
+            else
+              echo "any-changed=false" >> $GITHUB_OUTPUT
+            fi
           fi
 
   # Build Docker images only for changed packages
@@ -121,8 +159,8 @@ jobs:
         if: steps.should-build.outputs.build == 'true'
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
-          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.WIF_SERVICE_ACCOUNT }}
 
       - name: Set up Cloud SDK
         if: steps.should-build.outputs.build == 'true'
@@ -230,8 +268,8 @@ jobs:
         if: steps.should-deploy.outputs.should_deploy == 'true'
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
-          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.WIF_SERVICE_ACCOUNT }}
 
       - name: Set up Cloud SDK
         if: steps.should-deploy.outputs.should_deploy == 'true'
@@ -406,8 +444,8 @@ jobs:
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
-          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.WIF_SERVICE_ACCOUNT }}
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
