@@ -7,6 +7,7 @@ import { DbService } from './db-service.js';
 import { BlobService } from './blob-service.js';
 import { ToppingCategory } from './topping.js';
 import { OrderStatus, type OrderItem } from './order.js';
+import { featureFlags } from './feature-flags.js';
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -27,6 +28,28 @@ function transformBurgerImageUrl(burger: any, baseUrl: string) {
     ...burger,
     imageUrl: `${baseUrl}/api/images/${burger.imageUrl}`,
   };
+}
+
+// 🚨 PERFORMANCE ISSUE: CPU Blocking Helper
+// Inject synchronous blocking operations when feature flag is enabled
+function injectCpuBlockingIfEnabled() {
+  if (featureFlags.shouldAddCpuBlocking()) {
+    const duration = featureFlags.getCpuBlockingDuration();
+    console.warn(`⚠️  Injecting CPU blocking: ${duration}ms synchronous operation`);
+
+    // Intentionally block the event loop with CPU-intensive work
+    const start = Date.now();
+    let result = 0;
+
+    // Perform useless computation to burn CPU cycles
+    while (Date.now() - start < duration) {
+      // Fibonacci-like calculation to keep CPU busy
+      result += Math.sqrt(Math.random() * 1000000);
+    }
+
+    // Force the result to be used (prevent optimization)
+    if (result < 0) console.log(result);
+  }
 }
 
 // Routes
@@ -92,6 +115,9 @@ app.get('/api', async (_req: Request, res: Response) => {
 // Get all burgers
 app.get('/api/burgers', async (req: Request, res: Response) => {
   try {
+    // Inject CPU blocking if feature flag is enabled
+    injectCpuBlockingIfEnabled();
+
     const dataService = await DbService.getInstance();
     const burgers = await dataService.getBurgers();
 

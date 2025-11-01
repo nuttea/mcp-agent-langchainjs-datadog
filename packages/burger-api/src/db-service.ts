@@ -4,6 +4,7 @@ import toppingsData from '../data/toppings.json';
 import { ToppingCategory, Topping } from './topping.js';
 import { Burger } from './burger.js';
 import { Order, OrderStatus } from './order.js';
+import { featureFlags } from './feature-flags.js';
 
 // Helper to remove userId from Order(s)
 function stripUserId<T extends Order | Order[] | undefined>(orderOrOrders: T): T {
@@ -61,13 +62,16 @@ export class DbService {
 
       console.log(`Connecting to PostgreSQL at ${host}:${port}/${database}...`);
 
+      // Use feature flag to potentially reduce pool size
+      const poolSize = featureFlags.getDbPoolSize();
+
       this.pool = new Pool({
         host,
         port,
         user,
         password,
         database,
-        max: 20,
+        max: poolSize,
         idleTimeoutMillis: 30000,
         connectionTimeoutMillis: 10000,
       });
@@ -94,7 +98,7 @@ export class DbService {
     if (this.isPostgresInitialized && this.pool) {
       try {
         const result = await this.pool.query('SELECT * FROM burgers');
-        return result.rows.map(row => ({
+        const burgers = result.rows.map(row => ({
           id: row.id,
           name: row.name,
           description: row.description || '',
@@ -103,6 +107,23 @@ export class DbService {
           imageUrl: (row.image || '').replace(/^\/images\//, ''),
           toppings: [], // Database doesn't store default toppings array
         }));
+
+        // 🚨 PERFORMANCE ISSUE: N+1 Query Problem
+        // Inject redundant queries when feature flag is enabled
+        if (featureFlags.shouldInjectDbQueryLoops()) {
+          const loopCount = featureFlags.getQueryLoopCount();
+          console.warn(`⚠️  Injecting N+1 query problem: Running ${loopCount} redundant queries per burger`);
+
+          for (const burger of burgers) {
+            // Execute multiple redundant queries for each burger
+            for (let i = 0; i < loopCount; i++) {
+              // This is wasteful - we're re-querying data we already have!
+              await this.pool.query('SELECT price FROM burgers WHERE id = $1', [burger.id]);
+            }
+          }
+        }
+
+        return burgers;
       } catch (error) {
         console.error('Error fetching burgers from PostgreSQL:', error);
         return [...this.localBurgers];
