@@ -14,7 +14,8 @@ COPY package*.json ./
 COPY packages/burger-mcp/package*.json ./packages/burger-mcp/
 
 # Install dependencies for this workspace only
-RUN npm ci --workspace=burger-mcp --include-workspace-root
+# Note: --ignore-scripts prevents postinstall scripts from failing in containerized environment
+RUN npm ci --workspace=burger-mcp --include-workspace-root --ignore-scripts
 
 # ============================================
 # Builder stage
