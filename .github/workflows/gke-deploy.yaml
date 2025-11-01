@@ -31,90 +31,22 @@ env:
   GAR_REPOSITORY: ${{ vars.GAR_REPOSITORY }}
 
 jobs:
-  # Detect which packages have changed
+  # Always build all packages on every push (simplified - no change detection)
   detect-changes:
     name: Detect Changed Packages
     runs-on: ubuntu-latest
     outputs:
-      packages: ${{ steps.filter.outputs.changes }}
-      agent-api: ${{ steps.check-force.outputs.agent-api }}
-      agent-webapp: ${{ steps.check-force.outputs.agent-webapp }}
-      burger-api: ${{ steps.check-force.outputs.burger-api }}
-      burger-mcp: ${{ steps.check-force.outputs.burger-mcp }}
-      burger-webapp: ${{ steps.check-force.outputs.burger-webapp }}
-      any-changed: ${{ steps.check-force.outputs.any-changed }}
-      force-build: ${{ steps.check-force.outputs.force-build }}
+      agent-api: 'true'
+      agent-webapp: 'true'
+      burger-api: 'true'
+      burger-mcp: 'true'
+      burger-webapp: 'true'
+      any-changed: 'true'
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # Fetch all history for proper diff
-
-      - name: Check for force build keywords
-        id: check-keywords
+      - name: Always build all packages
         run: |
-          COMMIT_MSG="${{ github.event.head_commit.message }}"
-          FORCE_BUILD="false"
-
-          # Check for force build keywords in commit message
-          if echo "${COMMIT_MSG}" | grep -iE '\[force.build\]|\[rebuild.all\]|\[build.all\]'; then
-            FORCE_BUILD="true"
-            echo "🔨 Force build detected in commit message!"
-          fi
-
-          echo "force_build=${FORCE_BUILD}" >> $GITHUB_OUTPUT
-
-      - name: Check for package changes
-        uses: dorny/paths-filter@v3
-        id: filter
-        with:
-          filters: |
-            agent-api:
-              - 'packages/agent-api/**'
-            agent-webapp:
-              - 'packages/agent-webapp/**'
-            burger-api:
-              - 'packages/burger-api/**'
-            burger-mcp:
-              - 'packages/burger-mcp/**'
-            burger-webapp:
-              - 'packages/burger-webapp/**'
-
-      - name: Check if any package changed or force build
-        id: check-force
-        run: |
-          FORCE="${{ steps.check-keywords.outputs.force_build }}"
-
-          # If force build, mark all packages as changed
-          if [[ "${FORCE}" == "true" ]]; then
-            echo "🔨 FORCE BUILD: Building all packages"
-            echo "agent-api=true" >> $GITHUB_OUTPUT
-            echo "agent-webapp=true" >> $GITHUB_OUTPUT
-            echo "burger-api=true" >> $GITHUB_OUTPUT
-            echo "burger-mcp=true" >> $GITHUB_OUTPUT
-            echo "burger-webapp=true" >> $GITHUB_OUTPUT
-            echo "any-changed=true" >> $GITHUB_OUTPUT
-            echo "force-build=true" >> $GITHUB_OUTPUT
-          else
-            # Use actual change detection
-            echo "agent-api=${{ steps.filter.outputs.agent-api }}" >> $GITHUB_OUTPUT
-            echo "agent-webapp=${{ steps.filter.outputs.agent-webapp }}" >> $GITHUB_OUTPUT
-            echo "burger-api=${{ steps.filter.outputs.burger-api }}" >> $GITHUB_OUTPUT
-            echo "burger-mcp=${{ steps.filter.outputs.burger-mcp }}" >> $GITHUB_OUTPUT
-            echo "burger-webapp=${{ steps.filter.outputs.burger-webapp }}" >> $GITHUB_OUTPUT
-            echo "force-build=false" >> $GITHUB_OUTPUT
-
-            # Check if any package actually changed
-            if [[ "${{ steps.filter.outputs.agent-api }}" == "true" ]] || \
-               [[ "${{ steps.filter.outputs.agent-webapp }}" == "true" ]] || \
-               [[ "${{ steps.filter.outputs.burger-api }}" == "true" ]] || \
-               [[ "${{ steps.filter.outputs.burger-mcp }}" == "true" ]] || \
-               [[ "${{ steps.filter.outputs.burger-webapp }}" == "true" ]]; then
-              echo "any-changed=true" >> $GITHUB_OUTPUT
-            else
-              echo "any-changed=false" >> $GITHUB_OUTPUT
-            fi
-          fi
+          echo "✅ Building all packages on every push"
+          echo "This workflow now always builds all packages without change detection"
 
   # Build Docker images
   # Dev: Always build on push to main (uses :latest tag)
