@@ -55,6 +55,8 @@ spec:
         envFrom:
         - configMapRef:
             name: app-config
+        - configMapRef:
+            name: burger-api-perf-flags
         env:
         - name: DD_ENV
           valueFrom:

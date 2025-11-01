@@ -83,26 +83,76 @@ ab -n 500 -c 10 http://your-service/api/burgers
 
 ## Enabling Flags in Kubernetes
 
-### Using kubectl
+Feature flags are managed via the `burger-api-perf-flags` ConfigMap, which is automatically deployed with the application.
 
-Enable individual flags:
+### Method 1: Edit ConfigMap (Recommended)
+
+This is the cleanest approach as flags are managed centrally in the ConfigMap:
+
 ```bash
+# Edit the ConfigMap directly
+kubectl edit configmap burger-api-perf-flags -n mcp-agent-dev
+```
+
+Change the values from `"false"` to `"true"` to enable:
+```yaml
+data:
+  PERF_ISSUE_DB_QUERY_LOOPS: "true"      # Enable N+1 query problem
+  PERF_ISSUE_DB_POOL_EXHAUST: "true"     # Enable connection pool exhaustion
+  PERF_ISSUE_CPU_BLOCKING: "true"        # Enable CPU blocking
+```
+
+After editing, restart the deployment to apply changes:
+```bash
+kubectl rollout restart deployment/burger-api -n mcp-agent-dev
+```
+
+### Method 2: Patch ConfigMap with kubectl
+
+Enable individual flags using kubectl patch:
+```bash
+# Enable N+1 query problem
+kubectl patch configmap burger-api-perf-flags -n mcp-agent-dev \
+  -p '{"data":{"PERF_ISSUE_DB_QUERY_LOOPS":"true"}}'
+
+# Enable connection pool exhaustion
+kubectl patch configmap burger-api-perf-flags -n mcp-agent-dev \
+  -p '{"data":{"PERF_ISSUE_DB_POOL_EXHAUST":"true"}}'
+
+# Enable CPU blocking
+kubectl patch configmap burger-api-perf-flags -n mcp-agent-dev \
+  -p '{"data":{"PERF_ISSUE_CPU_BLOCKING":"true"}}'
+
+# Restart deployment to apply
+kubectl rollout restart deployment/burger-api -n mcp-agent-dev
+```
+
+Disable flags by setting back to `"false"`:
+```bash
+kubectl patch configmap burger-api-perf-flags -n mcp-agent-dev \
+  -p '{"data":{"PERF_ISSUE_DB_QUERY_LOOPS":"false","PERF_ISSUE_DB_POOL_EXHAUST":"false","PERF_ISSUE_CPU_BLOCKING":"false"}}'
+
+kubectl rollout restart deployment/burger-api -n mcp-agent-dev
+```
+
+### Method 3: Using kubectl set env (Alternative)
+
+You can also override ConfigMap values using environment variables on the deployment:
+
+```bash
+# Enable individual flags
 kubectl set env deployment/burger-api PERF_ISSUE_DB_QUERY_LOOPS=true -n mcp-agent-dev
 kubectl set env deployment/burger-api PERF_ISSUE_DB_POOL_EXHAUST=true -n mcp-agent-dev
 kubectl set env deployment/burger-api PERF_ISSUE_CPU_BLOCKING=true -n mcp-agent-dev
-```
 
-Enable all flags at once:
-```bash
+# Enable all flags at once
 kubectl set env deployment/burger-api \
   PERF_ISSUE_DB_QUERY_LOOPS=true \
   PERF_ISSUE_DB_POOL_EXHAUST=true \
   PERF_ISSUE_CPU_BLOCKING=true \
   -n mcp-agent-dev
-```
 
-Disable flags:
-```bash
+# Disable flags (remove env overrides)
 kubectl set env deployment/burger-api \
   PERF_ISSUE_DB_QUERY_LOOPS- \
   PERF_ISSUE_DB_POOL_EXHAUST- \
@@ -110,38 +160,28 @@ kubectl set env deployment/burger-api \
   -n mcp-agent-dev
 ```
 
-### Using Kustomize
+**Note:** Method 3 overrides the ConfigMap values. For cleaner management, use Method 1 or 2.
 
-Edit your kustomization file to add environment variables:
+### Method 4: Using Kustomize (For Persistent Changes)
 
+If you want to make persistent changes via Kustomize, edit the ConfigMap file directly:
+
+```bash
+# Edit the ConfigMap source file
+vi k8s/overlays/dev/configmap-perf-flags.yaml
+```
+
+Change the values in the `data` section:
 ```yaml
-# k8s/overlays/dev/kustomization.yaml
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
+data:
+  PERF_ISSUE_DB_QUERY_LOOPS: "true"
+  PERF_ISSUE_DB_POOL_EXHAUST: "true"
+  PERF_ISSUE_CPU_BLOCKING: "true"
+```
 
-resources:
-  - ../../base
-
-patches:
-  - target:
-      kind: Deployment
-      name: burger-api
-    patch: |-
-      - op: add
-        path: /spec/template/spec/containers/0/env/-
-        value:
-          name: PERF_ISSUE_DB_QUERY_LOOPS
-          value: "true"
-      - op: add
-        path: /spec/template/spec/containers/0/env/-
-        value:
-          name: PERF_ISSUE_DB_POOL_EXHAUST
-          value: "true"
-      - op: add
-        path: /spec/template/spec/containers/0/env/-
-        value:
-          name: PERF_ISSUE_CPU_BLOCKING
-          value: "true"
+Then apply with kustomize:
+```bash
+kubectl apply -k k8s/overlays/dev
 ```
 
 ## Demo Scenarios
