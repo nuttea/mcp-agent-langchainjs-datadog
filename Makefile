@@ -15,7 +15,7 @@ help:
 	@echo ""
 	@echo "Docker:"
 	@echo "  make docker-build                - Build all Docker images (linux/amd64)"
-	@echo "  make docker-push                 - Build and push all images to GCR"
+	@echo "  make docker-push                 - Build and push all images to GAR"
 	@echo "  make docker-logs                 - Show last build log"
 	@echo ""
 	@echo "Docker - Individual Services:"
@@ -105,7 +105,7 @@ docker-build:
 	@echo "Build complete. Check logs/build-*.log for details"
 
 docker-push: docker-build
-	@echo "Images built and pushed to GCR"
+	@echo "Images built and pushed to GAR ($(DOCKER_REGISTRY))"
 
 docker-logs:
 	@if [ -f logs/build-*.log ]; then \
@@ -114,54 +114,64 @@ docker-logs:
 		echo "No build logs found"; \
 	fi
 
+# Load .env file if it exists
+ifneq (,$(wildcard .env))
+    include .env
+    export
+endif
+
 # Build and push individual services
 # Usage: make docker-build-<service> [ENV=dev|prod]
 # Examples:
 #   make docker-build-agent-api          # defaults to dev
 #   make docker-build-burger-api ENV=prod
 
-GCR_PROJECT ?= gcr.io/datadog-ese-sandbox
+# Use GAR (Google Artifact Registry) from .env, fallback to GCR
+GAR_LOCATION ?= us-central1
+GAR_REPOSITORY ?= mcp-agent
+GCP_PROJECT_ID ?= datadog-ese-sandbox
+DOCKER_REGISTRY ?= $(GAR_LOCATION)-docker.pkg.dev/$(GCP_PROJECT_ID)/$(GAR_REPOSITORY)
 IMAGE_TAG ?= latest
 
 docker-build-agent-api:
-	@echo "Building and pushing agent-api..."
+	@echo "Building and pushing agent-api to $(DOCKER_REGISTRY)..."
 	docker buildx build --platform linux/amd64 \
 		-f packages/agent-api/Dockerfile \
-		-t $(GCR_PROJECT)/agent-api:$(IMAGE_TAG) \
+		-t $(DOCKER_REGISTRY)/agent-api:$(IMAGE_TAG) \
 		--push .
-	@echo "✓ agent-api built and pushed: $(GCR_PROJECT)/agent-api:$(IMAGE_TAG)"
+	@echo "✓ agent-api built and pushed: $(DOCKER_REGISTRY)/agent-api:$(IMAGE_TAG)"
 
 docker-build-agent-webapp:
-	@echo "Building and pushing agent-webapp..."
+	@echo "Building and pushing agent-webapp to $(DOCKER_REGISTRY)..."
 	docker buildx build --platform linux/amd64 \
 		-f packages/agent-webapp/Dockerfile \
-		-t $(GCR_PROJECT)/agent-webapp:$(IMAGE_TAG) \
+		-t $(DOCKER_REGISTRY)/agent-webapp:$(IMAGE_TAG) \
 		--push .
-	@echo "✓ agent-webapp built and pushed: $(GCR_PROJECT)/agent-webapp:$(IMAGE_TAG)"
+	@echo "✓ agent-webapp built and pushed: $(DOCKER_REGISTRY)/agent-webapp:$(IMAGE_TAG)"
 
 docker-build-burger-api:
-	@echo "Building and pushing burger-api..."
+	@echo "Building and pushing burger-api to $(DOCKER_REGISTRY)..."
 	docker buildx build --platform linux/amd64 \
 		-f packages/burger-api/Dockerfile \
-		-t $(GCR_PROJECT)/burger-api:$(IMAGE_TAG) \
+		-t $(DOCKER_REGISTRY)/burger-api:$(IMAGE_TAG) \
 		--push .
-	@echo "✓ burger-api built and pushed: $(GCR_PROJECT)/burger-api:$(IMAGE_TAG)"
+	@echo "✓ burger-api built and pushed: $(DOCKER_REGISTRY)/burger-api:$(IMAGE_TAG)"
 
 docker-build-burger-webapp:
-	@echo "Building and pushing burger-webapp..."
+	@echo "Building and pushing burger-webapp to $(DOCKER_REGISTRY)..."
 	docker buildx build --platform linux/amd64 \
 		-f packages/burger-webapp/Dockerfile \
-		-t $(GCR_PROJECT)/burger-webapp:$(IMAGE_TAG) \
+		-t $(DOCKER_REGISTRY)/burger-webapp:$(IMAGE_TAG) \
 		--push .
-	@echo "✓ burger-webapp built and pushed: $(GCR_PROJECT)/burger-webapp:$(IMAGE_TAG)"
+	@echo "✓ burger-webapp built and pushed: $(DOCKER_REGISTRY)/burger-webapp:$(IMAGE_TAG)"
 
 docker-build-burger-mcp:
-	@echo "Building and pushing burger-mcp..."
+	@echo "Building and pushing burger-mcp to $(DOCKER_REGISTRY)..."
 	docker buildx build --platform linux/amd64 \
 		-f packages/burger-mcp/Dockerfile \
-		-t $(GCR_PROJECT)/burger-mcp:$(IMAGE_TAG) \
+		-t $(DOCKER_REGISTRY)/burger-mcp:$(IMAGE_TAG) \
 		--push .
-	@echo "✓ burger-mcp built and pushed: $(GCR_PROJECT)/burger-mcp:$(IMAGE_TAG)"
+	@echo "✓ burger-mcp built and pushed: $(DOCKER_REGISTRY)/burger-mcp:$(IMAGE_TAG)"
 
 # Deploy individual services (build, push, and restart)
 # Usage: make deploy-<service> [ENV=dev|prod]
@@ -349,7 +359,7 @@ port-forward-mcp:
 # Cleanup
 docker-clean:
 	@echo "Cleaning Docker images..."
-	docker rmi $$(docker images -q gcr.io/datadog-ese-sandbox/*) 2>/dev/null || true
+	docker rmi $$(docker images -q $(DOCKER_REGISTRY)/*) 2>/dev/null || true
 	@echo "Docker images cleaned"
 
 clean-all: clean docker-clean
