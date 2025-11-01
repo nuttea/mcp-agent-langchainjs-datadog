@@ -146,9 +146,8 @@ jobs:
             ${{ steps.tags.outputs.commit_tag }}
             ${{ steps.tags.outputs.branch_tag }}
             ${{ steps.tags.outputs.latest_tag }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
           platforms: linux/amd64
+          no-cache: true
 
       - name: Output image details
         if: steps.should-build.outputs.build == 'true'
