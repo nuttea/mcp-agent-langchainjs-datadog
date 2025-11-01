@@ -17,18 +17,26 @@ resources:
   - secrets.yaml
   - httproute.yaml
 
-# Use specific version tags for prod (can be updated via CI/CD)
+# Prod environment: Use commit SHA tags for immutable deployments
+# Images are built with commit SHA tags when code changes are merged to prod branch
+# The workflow will update these tags dynamically during deployment
+# Default to 'prod-pending' which will be replaced by actual commit SHA
 images:
   - name: gcr.io/datadog-ese-sandbox/agent-api
-    newTag: latest  # TODO: Use specific version in prod (e.g., v1.0.0)
+    newName: us-central1-docker.pkg.dev/datadog-ese-sandbox/mcp-agent/agent-api
+    newTag: prod-pending
   - name: gcr.io/datadog-ese-sandbox/agent-webapp
-    newTag: latest
+    newName: us-central1-docker.pkg.dev/datadog-ese-sandbox/mcp-agent/agent-webapp
+    newTag: prod-pending
   - name: gcr.io/datadog-ese-sandbox/burger-api
-    newTag: latest
+    newName: us-central1-docker.pkg.dev/datadog-ese-sandbox/mcp-agent/burger-api
+    newTag: prod-pending
   - name: gcr.io/datadog-ese-sandbox/burger-webapp
-    newTag: latest
+    newName: us-central1-docker.pkg.dev/datadog-ese-sandbox/mcp-agent/burger-webapp
+    newTag: prod-pending
   - name: gcr.io/datadog-ese-sandbox/burger-mcp
-    newTag: latest
+    newName: us-central1-docker.pkg.dev/datadog-ese-sandbox/mcp-agent/burger-mcp
+    newTag: prod-pending
 
 # Apply patches for prod-specific configurations
 patches:

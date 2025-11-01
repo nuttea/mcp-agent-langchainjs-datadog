@@ -17,17 +17,24 @@ resources:
   - secrets.yaml
   - httproute.yaml
 
-# Use latest tag for dev
+# Dev environment: Always use :latest tag
+# Images are built and tagged with :latest on every push to main branch
+# The :latest tag is continuously updated with newest code
 images:
   - name: gcr.io/datadog-ese-sandbox/agent-api
+    newName: us-central1-docker.pkg.dev/datadog-ese-sandbox/mcp-agent/agent-api
     newTag: latest
   - name: gcr.io/datadog-ese-sandbox/agent-webapp
+    newName: us-central1-docker.pkg.dev/datadog-ese-sandbox/mcp-agent/agent-webapp
     newTag: latest
   - name: gcr.io/datadog-ese-sandbox/burger-api
+    newName: us-central1-docker.pkg.dev/datadog-ese-sandbox/mcp-agent/burger-api
     newTag: latest
   - name: gcr.io/datadog-ese-sandbox/burger-webapp
+    newName: us-central1-docker.pkg.dev/datadog-ese-sandbox/mcp-agent/burger-webapp
     newTag: latest
   - name: gcr.io/datadog-ese-sandbox/burger-mcp
+    newName: us-central1-docker.pkg.dev/datadog-ese-sandbox/mcp-agent/burger-mcp
     newTag: latest
 
 # Apply patches for dev-specific configurations
