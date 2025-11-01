@@ -57,16 +57,12 @@ FROM node:22-alpine AS production
 
 WORKDIR /app
 
-# Copy package files for production install
+# Copy package files and built application from builder
 COPY --from=builder /app/packages/agent-api/package*.json ./
-
-# Install ONLY production dependencies (no dev dependencies)
-# Use --ignore-scripts to skip post-install scripts (faster)
-RUN npm ci --omit=dev --ignore-scripts && \
-    npm cache clean --force
-
-# Copy built application from builder
 COPY --from=builder /app/packages/agent-api/dist ./dist
+
+# Copy production node_modules from builder (no reinstall needed)
+COPY --from=builder /app/packages/agent-api/node_modules ./node_modules
 
 # Create non-root user for security (required by K8s security policies)
 RUN addgroup -g 1000 nodejs && \

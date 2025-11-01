@@ -43,15 +43,12 @@ FROM node:22-alpine AS production
 
 WORKDIR /app
 
-# Copy package files
+# Copy package files and built application from builder
 COPY --from=builder /app/packages/burger-mcp/package*.json ./
-
-# Install ONLY production dependencies
-RUN npm ci --omit=dev --ignore-scripts && \
-    npm cache clean --force
-
-# Copy built application (burger-mcp uses 'lib' directory)
 COPY --from=builder /app/packages/burger-mcp/lib ./lib
+
+# Copy only production node_modules from builder (already filtered during build)
+COPY --from=builder /app/packages/burger-mcp/node_modules ./node_modules
 
 # Create non-root user
 RUN addgroup -g 1000 nodejs && \
