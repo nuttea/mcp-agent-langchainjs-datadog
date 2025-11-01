@@ -383,7 +383,29 @@ jobs:
 
           # Check if all deployments are ready
           kubectl wait --for=condition=available --timeout=300s \
-            deployment --all -n ${NAMESPACE}
+            deployment --all -n ${NAMESPACE} || {
+            echo "❌ Deployment failed! Checking pod status..."
+            kubectl get pods -n ${NAMESPACE} -o wide
+
+            # Check for pods in CrashLoopBackOff or Error state
+            FAILED_PODS=$(kubectl get pods -n ${NAMESPACE} --field-selector=status.phase!=Running,status.phase!=Succeeded -o jsonpath='{.items[*].metadata.name}')
+
+            if [[ -n "${FAILED_PODS}" ]]; then
+              echo "Failed pods: ${FAILED_PODS}"
+              for pod in ${FAILED_PODS}; do
+                echo "==== Logs for ${pod} ===="
+                kubectl logs -n ${NAMESPACE} ${pod} --tail=50 || echo "Could not fetch logs for ${pod}"
+                echo ""
+                echo "==== Events for ${pod} ===="
+                kubectl describe pod -n ${NAMESPACE} ${pod} | grep -A 20 "Events:"
+                echo ""
+              done
+            fi
+
+            exit 1
+          }
+
+          echo "✅ All deployments are ready"
 
       - name: Run smoke tests
         if: steps.should-deploy.outputs.should_deploy == 'true'
