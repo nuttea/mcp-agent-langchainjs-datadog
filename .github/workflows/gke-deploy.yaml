@@ -5,11 +5,8 @@ on:
     branches:
       - main    # Deploy to dev
       - prod    # Deploy to prod
-    paths:
-      - 'packages/**'
-      - 'k8s/**'
-      - 'Makefile'
-      - '.github/workflows/gke-deploy.yaml'
+    # Note: No paths filter - workflow always runs to check for [force build] keyword
+    # Change detection happens in detect-changes job
 
   workflow_dispatch:
     inputs:
