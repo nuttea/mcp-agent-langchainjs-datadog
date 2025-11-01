@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: burger-api-perf-flags
+  namespace: mcp-agent-prod
+  labels:
+    app: mcp-agent
+    service: burger-api
+    environment: prod
+    purpose: datadog-demo
+  annotations:
+    description: |
+      Performance Issue Injection Feature Flags for Datadog APM/Watchdog Demo
+
+      PERF_ISSUE_DB_QUERY_LOOPS: Injects N+1 query problem (5 extra queries per burger)
+      PERF_ISSUE_DB_POOL_EXHAUST: Reduces PostgreSQL connection pool from 10 to 2
+      PERF_ISSUE_CPU_BLOCKING: Adds 100ms synchronous CPU-intensive operations
+
+      Set each to "true" to enable, "false" to disable
+data:
+  PERF_ISSUE_DB_QUERY_LOOPS: "false"
+  PERF_ISSUE_DB_POOL_EXHAUST: "false"
+  PERF_ISSUE_CPU_BLOCKING: "false"

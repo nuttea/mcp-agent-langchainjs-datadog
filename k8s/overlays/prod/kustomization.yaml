@@ -16,6 +16,7 @@ resources:
   - namespace.yaml
   - secrets.yaml
   - httproute.yaml
+  - configmap-perf-flags.yaml
 
 # Prod environment: Use commit SHA tags for immutable deployments
 # Images are built with commit SHA tags when code changes are merged to prod branch
