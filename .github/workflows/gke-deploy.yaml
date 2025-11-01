@@ -183,7 +183,10 @@ jobs:
     name: Deploy to ${{ matrix.environment }}
     runs-on: ubuntu-latest
     needs: [detect-changes, build-images]
-    if: always() && (needs.build-images.result == 'success' || needs.build-images.result == 'skipped')
+    if: |
+      always() &&
+      (needs.build-images.result == 'success' || needs.build-images.result == 'skipped') &&
+      (github.ref == format('refs/heads/{0}', matrix.branch) || github.event.inputs.environment == matrix.environment)
     permissions:
       contents: read
       id-token: write
@@ -194,10 +197,6 @@ jobs:
             environment: dev
           - branch: prod
             environment: prod
-    # Only deploy if the branch matches
-    if: |
-      github.ref == format('refs/heads/{0}', matrix.branch) ||
-      github.event.inputs.environment == matrix.environment
     environment:
       name: ${{ matrix.environment }}
       url: https://${{ matrix.environment == 'prod' && 'platform-engineering-demo.dev' || 'dev.platform-engineering-demo.dev' }}
