@@ -311,12 +311,13 @@ jobs:
           cd k8s/overlays/${{ matrix.environment }}
 
           # Update images with commit hash
+          # Note: The name must match the 'name' field in kustomization.yaml images section
           kustomize edit set image \
-            agent-api=${IMAGE_BASE}/agent-api:${SHORT_SHA} \
-            agent-webapp=${IMAGE_BASE}/agent-webapp:${SHORT_SHA} \
-            burger-api=${IMAGE_BASE}/burger-api:${SHORT_SHA} \
-            burger-mcp=${IMAGE_BASE}/burger-mcp:${SHORT_SHA} \
-            burger-webapp=${IMAGE_BASE}/burger-webapp:${SHORT_SHA}
+            gcr.io/${{ env.GCP_PROJECT_ID }}/agent-api=${IMAGE_BASE}/agent-api:${SHORT_SHA} \
+            gcr.io/${{ env.GCP_PROJECT_ID }}/agent-webapp=${IMAGE_BASE}/agent-webapp:${SHORT_SHA} \
+            gcr.io/${{ env.GCP_PROJECT_ID }}/burger-api=${IMAGE_BASE}/burger-api:${SHORT_SHA} \
+            gcr.io/${{ env.GCP_PROJECT_ID }}/burger-mcp=${IMAGE_BASE}/burger-mcp:${SHORT_SHA} \
+            gcr.io/${{ env.GCP_PROJECT_ID }}/burger-webapp=${IMAGE_BASE}/burger-webapp:${SHORT_SHA}
 
       - name: Deploy with Canary Strategy
         if: steps.should-deploy.outputs.should_deploy == 'true'
