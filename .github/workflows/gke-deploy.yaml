@@ -1,0 +1,405 @@
+name: Build and Deploy to GKE
+
+on:
+  push:
+    branches:
+      - main    # Deploy to dev
+      - prod    # Deploy to prod
+    paths:
+      - 'packages/**'
+      - 'k8s/**'
+      - 'Makefile'
+      - '.github/workflows/gke-deploy.yaml'
+
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        type: choice
+        options:
+          - dev
+          - prod
+      skip_build:
+        description: 'Skip image build (use existing images)'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  GKE_CLUSTER: ${{ secrets.GKE_CLUSTER }}
+  GKE_ZONE: ${{ secrets.GKE_ZONE }}
+  GAR_LOCATION: ${{ secrets.GAR_LOCATION }}
+  GAR_REPOSITORY: ${{ secrets.GAR_REPOSITORY }}
+
+jobs:
+  # Detect which packages have changed
+  detect-changes:
+    name: Detect Changed Packages
+    runs-on: ubuntu-latest
+    outputs:
+      packages: ${{ steps.filter.outputs.changes }}
+      agent-api: ${{ steps.filter.outputs.agent-api }}
+      agent-webapp: ${{ steps.filter.outputs.agent-webapp }}
+      burger-api: ${{ steps.filter.outputs.burger-api }}
+      burger-mcp: ${{ steps.filter.outputs.burger-mcp }}
+      burger-webapp: ${{ steps.filter.outputs.burger-webapp }}
+      any-changed: ${{ steps.check.outputs.any-changed }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for proper diff
+
+      - name: Check for package changes
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            agent-api:
+              - 'packages/agent-api/**'
+            agent-webapp:
+              - 'packages/agent-webapp/**'
+            burger-api:
+              - 'packages/burger-api/**'
+            burger-mcp:
+              - 'packages/burger-mcp/**'
+            burger-webapp:
+              - 'packages/burger-webapp/**'
+
+      - name: Check if any package changed
+        id: check
+        run: |
+          if [[ "${{ steps.filter.outputs.agent-api }}" == "true" ]] || \
+             [[ "${{ steps.filter.outputs.agent-webapp }}" == "true" ]] || \
+             [[ "${{ steps.filter.outputs.burger-api }}" == "true" ]] || \
+             [[ "${{ steps.filter.outputs.burger-mcp }}" == "true" ]] || \
+             [[ "${{ steps.filter.outputs.burger-webapp }}" == "true" ]]; then
+            echo "any-changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "any-changed=false" >> $GITHUB_OUTPUT
+          fi
+
+  # Build Docker images only for changed packages
+  build-images:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: |
+      needs.detect-changes.outputs.any-changed == 'true' &&
+      github.event.inputs.skip_build != 'true'
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      matrix:
+        package:
+          - agent-api
+          - agent-webapp
+          - burger-api
+          - burger-mcp
+          - burger-webapp
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check if this package changed
+        id: should-build
+        run: |
+          if [[ "${{ needs.detect-changes.outputs[matrix.package] }}" == "true" ]]; then
+            echo "build=true" >> $GITHUB_OUTPUT
+          else
+            echo "build=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set up Docker Buildx
+        if: steps.should-build.outputs.build == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Authenticate to Google Cloud
+        if: steps.should-build.outputs.build == 'true'
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        if: steps.should-build.outputs.build == 'true'
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for GAR
+        if: steps.should-build.outputs.build == 'true'
+        run: |
+          gcloud auth configure-docker ${{ env.GAR_LOCATION }}-docker.pkg.dev
+
+      - name: Generate image tags
+        if: steps.should-build.outputs.build == 'true'
+        id: tags
+        run: |
+          SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
+          IMAGE_BASE="${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ matrix.package }}"
+
+          # Tag with commit hash (primary identifier)
+          echo "commit_tag=${IMAGE_BASE}:${SHORT_SHA}" >> $GITHUB_OUTPUT
+
+          # Tag with branch name
+          BRANCH_NAME=$(echo ${GITHUB_REF#refs/heads/} | sed 's/\//-/g')
+          echo "branch_tag=${IMAGE_BASE}:${BRANCH_NAME}" >> $GITHUB_OUTPUT
+
+          # Tag with latest if main branch
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            echo "latest_tag=${IMAGE_BASE}:latest" >> $GITHUB_OUTPUT
+          fi
+
+          echo "image_base=${IMAGE_BASE}" >> $GITHUB_OUTPUT
+          echo "short_sha=${SHORT_SHA}" >> $GITHUB_OUTPUT
+
+      - name: Build and push Docker image
+        if: steps.should-build.outputs.build == 'true'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: packages/${{ matrix.package }}/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.tags.outputs.commit_tag }}
+            ${{ steps.tags.outputs.branch_tag }}
+            ${{ steps.tags.outputs.latest_tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
+
+      - name: Output image details
+        if: steps.should-build.outputs.build == 'true'
+        run: |
+          echo "Built and pushed images:"
+          echo "- ${{ steps.tags.outputs.commit_tag }}"
+          echo "- ${{ steps.tags.outputs.branch_tag }}"
+          echo "- ${{ steps.tags.outputs.latest_tag }}"
+
+  # Deploy to environment
+  deploy:
+    name: Deploy to ${{ matrix.environment }}
+    runs-on: ubuntu-latest
+    needs: [detect-changes, build-images]
+    if: always() && (needs.build-images.result == 'success' || needs.build-images.result == 'skipped')
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      matrix:
+        include:
+          - branch: main
+            environment: dev
+          - branch: prod
+            environment: prod
+    # Only deploy if the branch matches
+    if: |
+      github.ref == format('refs/heads/{0}', matrix.branch) ||
+      github.event.inputs.environment == matrix.environment
+    environment:
+      name: ${{ matrix.environment }}
+      url: https://${{ matrix.environment == 'prod' && 'platform-engineering-demo.dev' || 'dev.platform-engineering-demo.dev' }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Install gke-gcloud-auth-plugin
+        run: |
+          gcloud components install gke-gcloud-auth-plugin
+
+      - name: Get GKE credentials
+        run: |
+          gcloud container clusters get-credentials ${{ env.GKE_CLUSTER }} \
+            --zone=${{ env.GKE_ZONE }} \
+            --project=${{ env.GCP_PROJECT_ID }}
+
+      - name: Install Kustomize
+        run: |
+          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+          sudo mv kustomize /usr/local/bin/
+
+      - name: Generate secrets
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+        run: |
+          ./k8s/scripts/generate-secrets.sh ${{ matrix.environment }}
+
+      - name: Update image tags in Kustomize
+        run: |
+          SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
+          IMAGE_BASE="${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}"
+
+          cd k8s/overlays/${{ matrix.environment }}
+
+          # Update images with commit hash
+          kustomize edit set image \
+            agent-api=${IMAGE_BASE}/agent-api:${SHORT_SHA} \
+            agent-webapp=${IMAGE_BASE}/agent-webapp:${SHORT_SHA} \
+            burger-api=${IMAGE_BASE}/burger-api:${SHORT_SHA} \
+            burger-mcp=${IMAGE_BASE}/burger-mcp:${SHORT_SHA} \
+            burger-webapp=${IMAGE_BASE}/burger-webapp:${SHORT_SHA}
+
+      - name: Deploy with Canary Strategy
+        run: |
+          ENV=${{ matrix.environment }}
+          NAMESPACE="mcp-agent-${ENV}"
+          SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
+
+          echo "Deploying to ${ENV} environment (namespace: ${NAMESPACE})"
+
+          # Apply base infrastructure (ConfigMaps, Services, etc.)
+          kubectl apply -k k8s/overlays/${ENV}
+
+          # For production, use canary deployment strategy
+          if [[ "${ENV}" == "prod" ]]; then
+            echo "Using canary deployment strategy for production"
+
+            # Get list of deployments
+            DEPLOYMENTS=$(kubectl get deployments -n ${NAMESPACE} -o name | grep -v canary || true)
+
+            for DEPLOYMENT in ${DEPLOYMENTS}; do
+              DEPLOY_NAME=$(echo ${DEPLOYMENT} | cut -d'/' -f2)
+
+              echo "Starting canary deployment for ${DEPLOY_NAME}"
+
+              # Create canary deployment (10% of replicas)
+              kubectl get deployment ${DEPLOY_NAME} -n ${NAMESPACE} -o yaml | \
+                sed "s/${DEPLOY_NAME}/${DEPLOY_NAME}-canary/g" | \
+                kubectl apply -f -
+
+              # Scale canary to 1 replica
+              kubectl scale deployment ${DEPLOY_NAME}-canary -n ${NAMESPACE} --replicas=1
+
+              # Wait for canary to be ready
+              kubectl rollout status deployment/${DEPLOY_NAME}-canary -n ${NAMESPACE} --timeout=5m
+
+              # Check canary health (wait 30 seconds)
+              echo "Canary deployed, monitoring for 30 seconds..."
+              sleep 30
+
+              # Check if canary pods are healthy
+              CANARY_READY=$(kubectl get deployment ${DEPLOY_NAME}-canary -n ${NAMESPACE} -o jsonpath='{.status.readyReplicas}')
+              if [[ "${CANARY_READY}" -lt 1 ]]; then
+                echo "Canary deployment failed health check. Rolling back..."
+                kubectl delete deployment ${DEPLOY_NAME}-canary -n ${NAMESPACE}
+                exit 1
+              fi
+
+              echo "Canary healthy, proceeding with full rollout..."
+
+              # Update main deployment
+              kubectl set image deployment/${DEPLOY_NAME} -n ${NAMESPACE} \
+                ${DEPLOY_NAME}=${GAR_LOCATION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/${DEPLOY_NAME}:${SHORT_SHA}
+
+              # Wait for main deployment rollout
+              kubectl rollout status deployment/${DEPLOY_NAME} -n ${NAMESPACE} --timeout=5m
+
+              # Delete canary deployment
+              kubectl delete deployment ${DEPLOY_NAME}-canary -n ${NAMESPACE}
+
+              echo "Canary deployment completed for ${DEPLOY_NAME}"
+            done
+          else
+            # For dev, use standard rolling update
+            echo "Using standard rolling update for dev environment"
+            kubectl rollout restart deployment -n ${NAMESPACE}
+          fi
+
+      - name: Verify deployment
+        run: |
+          ENV=${{ matrix.environment }}
+          NAMESPACE="mcp-agent-${ENV}"
+
+          echo "Verifying deployments in ${NAMESPACE}..."
+          kubectl get deployments -n ${NAMESPACE}
+          kubectl get pods -n ${NAMESPACE}
+
+          # Check if all deployments are ready
+          kubectl wait --for=condition=available --timeout=300s \
+            deployment --all -n ${NAMESPACE}
+
+      - name: Run smoke tests
+        run: |
+          ENV=${{ matrix.environment }}
+
+          if [[ "${ENV}" == "prod" ]]; then
+            AGENT_URL="https://platform-engineering-demo.dev"
+            BURGER_API_URL="https://burger-api.platform-engineering-demo.dev"
+          else
+            AGENT_URL="https://dev.platform-engineering-demo.dev"
+            BURGER_API_URL="https://burger-api-dev.platform-engineering-demo.dev"
+          fi
+
+          echo "Running smoke tests..."
+
+          # Test burger-api health
+          curl -f ${BURGER_API_URL}/api/burgers | jq '.[] | .name' | head -3
+
+          echo "Smoke tests passed!"
+
+      - name: Notify deployment status
+        if: always()
+        run: |
+          if [[ "${{ job.status }}" == "success" ]]; then
+            echo "✅ Deployment to ${{ matrix.environment }} successful!"
+          else
+            echo "❌ Deployment to ${{ matrix.environment }} failed!"
+          fi
+
+  # Cleanup old images
+  cleanup:
+    name: Cleanup Old Images
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: success()
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Clean up old images (keep last 10)
+        run: |
+          PACKAGES="agent-api agent-webapp burger-api burger-mcp burger-webapp"
+
+          for PACKAGE in ${PACKAGES}; do
+            echo "Cleaning up old images for ${PACKAGE}..."
+
+            # Get all image digests sorted by creation time
+            gcloud artifacts docker images list \
+              ${GAR_LOCATION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/${PACKAGE} \
+              --format="get(digest)" \
+              --sort-by="~createTime" \
+              --limit=1000 | tail -n +11 | while read DIGEST; do
+
+              if [[ ! -z "${DIGEST}" ]]; then
+                echo "Deleting ${PACKAGE}@${DIGEST}"
+                gcloud artifacts docker images delete \
+                  ${GAR_LOCATION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/${PACKAGE}@${DIGEST} \
+                  --quiet || true
+              fi
+            done
+          done

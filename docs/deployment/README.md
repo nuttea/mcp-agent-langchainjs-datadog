@@ -6,10 +6,16 @@ Complete guides for deploying the MCP Agent application to Google Kubernetes Eng
 
 Start here for fast deployment:
 
+- **[CICD_QUICKSTART.md](CICD_QUICKSTART.md)** - ⚡ GitHub Actions CI/CD setup (5 minutes)
 - **[QUICKSTART_GKE_UPDATED.md](QUICKSTART_GKE_UPDATED.md)** - Latest GKE quick start (recommended)
 - **[DEPLOY_TO_PROD_QUICKSTART.md](DEPLOY_TO_PROD_QUICKSTART.md)** - Production deployment quick start
 
 ## Comprehensive Guides
+
+### CI/CD & Automation
+
+- **[GITHUB_ACTIONS_SETUP.md](GITHUB_ACTIONS_SETUP.md)** - Complete GitHub Actions setup with Workload Identity
+- **[CICD_QUICKSTART.md](CICD_QUICKSTART.md)** - Quick CI/CD setup in 5 minutes
 
 ### Initial Setup
 

@@ -13,8 +13,16 @@ yarn-debug.log*
 yarn-error.log*
 
 # Deployment
-*.env*
+.env
+.env.local
+.env.*.local
+.env.github
 .azure
+
+# Allow .env.example (template file without secrets)
+!.env.example
+# Allow .env.github.example (template file without secrets)
+!.env.github.example
 
 # Misc
 .DS_Store
