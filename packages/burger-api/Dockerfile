@@ -1,34 +1,21 @@
-# Optimized Dockerfile for burger-api
+# Simplified Dockerfile for burger-api
 # Build from repository root context: docker build -f packages/burger-api/Dockerfile -t burger-api .
 
-FROM node:22-alpine AS base
-RUN apk add --no-cache python3 make g++
+FROM node:22-alpine AS builder
+
 WORKDIR /app
 
-# ============================================
-# Dependencies stage (best caching)
-# ============================================
-FROM base AS dependencies
+# Install build dependencies
+RUN apk add --no-cache python3 make g++
 
+# Copy all package files
 COPY package*.json ./
 COPY packages/burger-api/package*.json ./packages/burger-api/
 
-# Install dependencies for this workspace only
+# Install all dependencies (including workspace)
 RUN npm ci --workspace=burger-api --include-workspace-root
 
-# ============================================
-# Builder stage
-# ============================================
-FROM base AS builder
-
-WORKDIR /app
-
-# Copy dependencies from previous stage
-COPY --from=dependencies /app/node_modules ./node_modules
-COPY --from=dependencies /app/packages ./packages
-
 # Copy source code
-COPY package*.json ./
 COPY packages/burger-api ./packages/burger-api
 
 # Build the application
@@ -42,12 +29,15 @@ FROM node:22-alpine AS production
 
 WORKDIR /app
 
-# Copy package files and built application from builder
+# Copy package files
+COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/packages/burger-api/package*.json ./
+
+# Copy built application
 COPY --from=builder /app/packages/burger-api/dist ./dist
 
-# Copy production node_modules from builder (no reinstall needed)
-COPY --from=builder /app/packages/burger-api/node_modules ./node_modules
+# Copy all node_modules from builder (workspace installs at root level)
+COPY --from=builder /app/node_modules ./node_modules
 
 # Create non-root user
 RUN addgroup -g 1000 nodejs && \

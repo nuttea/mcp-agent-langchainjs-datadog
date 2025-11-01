@@ -1,49 +1,21 @@
-# Optimized Dockerfile for agent-api
-# Build from repository root context: docker build -f packages/agent-api/Dockerfile.optimized -t agent-api .
-#
-# Key optimizations:
-# 1. Separate dependencies layer for better caching
-# 2. Workspace-specific npm ci for faster installs
-# 3. Multi-stage build for smaller final image
-# 4. Security: non-root user
-# 5. Health check for Kubernetes readiness
+# Simplified Dockerfile for agent-api
+# Build from repository root context: docker build -f packages/agent-api/Dockerfile -t agent-api .
 
-# ============================================
-# Base stage with common dependencies
-# ============================================
-FROM node:22-alpine AS base
-
-# Install build dependencies (only if native modules needed)
-RUN apk add --no-cache python3 make g++
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# ============================================
-# Dependencies stage (best caching)
-# ============================================
-FROM base AS dependencies
+# Install build dependencies
+RUN apk add --no-cache python3 make g++
 
-# Copy only package manifests (these change less frequently)
+# Copy all package files
 COPY package*.json ./
 COPY packages/agent-api/package*.json ./packages/agent-api/
 
-# Install dependencies for this workspace only (much faster than all workspaces)
-# This layer will be cached unless package.json changes
+# Install all dependencies (including workspace)
 RUN npm ci --workspace=agent-api --include-workspace-root
 
-# ============================================
-# Builder stage
-# ============================================
-FROM base AS builder
-
-WORKDIR /app
-
-# Copy installed dependencies from previous stage
-COPY --from=dependencies /app/node_modules ./node_modules
-COPY --from=dependencies /app/packages ./packages
-
-# Copy source code (these change frequently, so copy after deps)
-COPY package*.json ./
+# Copy source code
 COPY packages/agent-api ./packages/agent-api
 
 # Build the application
@@ -51,18 +23,21 @@ WORKDIR /app/packages/agent-api
 RUN npm run build
 
 # ============================================
-# Production stage (minimal final image)
+# Production stage
 # ============================================
 FROM node:22-alpine AS production
 
 WORKDIR /app
 
-# Copy package files and built application from builder
+# Copy package files
+COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/packages/agent-api/package*.json ./
+
+# Copy built application
 COPY --from=builder /app/packages/agent-api/dist ./dist
 
-# Copy production node_modules from builder (no reinstall needed)
-COPY --from=builder /app/packages/agent-api/node_modules ./node_modules
+# Copy all node_modules from builder (workspace installs at root level)
+COPY --from=builder /app/node_modules ./node_modules
 
 # Create non-root user for security (required by K8s security policies)
 RUN addgroup -g 1000 nodejs && \

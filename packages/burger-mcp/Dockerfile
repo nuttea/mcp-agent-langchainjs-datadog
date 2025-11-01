@@ -1,35 +1,21 @@
-# Optimized Dockerfile for burger-mcp
+# Simplified Dockerfile for burger-mcp
 # Build from repository root context: docker build -f packages/burger-mcp/Dockerfile -t burger-mcp .
 
-FROM node:22-alpine AS base
-RUN apk add --no-cache python3 make g++
+FROM node:22-alpine AS builder
+
 WORKDIR /app
 
-# ============================================
-# Dependencies stage (best caching)
-# ============================================
-FROM base AS dependencies
+# Install build dependencies
+RUN apk add --no-cache python3 make g++
 
+# Copy all package files
 COPY package*.json ./
 COPY packages/burger-mcp/package*.json ./packages/burger-mcp/
 
-# Install dependencies for this workspace only
-# Note: --ignore-scripts prevents postinstall scripts from failing in containerized environment
+# Install all dependencies (including workspace)
 RUN npm ci --workspace=burger-mcp --include-workspace-root --ignore-scripts
 
-# ============================================
-# Builder stage
-# ============================================
-FROM base AS builder
-
-WORKDIR /app
-
-# Copy installed node_modules from dependencies stage
-COPY --from=dependencies /app/node_modules ./node_modules
-COPY --from=dependencies /app/packages ./packages
-
-# Copy source code (will overwrite package.json but node_modules are preserved)
-COPY package*.json ./
+# Copy source code
 COPY packages/burger-mcp ./packages/burger-mcp
 
 # Build the application
@@ -43,12 +29,15 @@ FROM node:22-alpine AS production
 
 WORKDIR /app
 
-# Copy package files and built application from builder
+# Copy package files
+COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/packages/burger-mcp/package*.json ./
+
+# Copy built application
 COPY --from=builder /app/packages/burger-mcp/lib ./lib
 
-# Copy only production node_modules from builder (already filtered during build)
-COPY --from=builder /app/packages/burger-mcp/node_modules ./node_modules
+# Copy all node_modules from builder (workspace installs at root level)
+COPY --from=builder /app/node_modules ./node_modules
 
 # Create non-root user
 RUN addgroup -g 1000 nodejs && \
