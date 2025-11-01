@@ -106,13 +106,14 @@ generate_secrets_for_env() {
   mkdir -p "k8s/overlays/${target_env}"
 
   # Base64 encode the secrets (required for Kubernetes secrets)
-  local dd_api_key_b64=$(echo -n "$DD_API_KEY" | base64)
-  local openai_api_key_b64=$(echo -n "$OPENAI_API_KEY" | base64)
+  # Note: Use tr -d '\n' to remove newlines that macOS base64 adds for long strings
+  local dd_api_key_b64=$(echo -n "$DD_API_KEY" | base64 | tr -d '\n')
+  local openai_api_key_b64=$(echo -n "$OPENAI_API_KEY" | base64 | tr -d '\n')
 
   # Optional: Vertex AI key
   local vertex_ai_key_b64=""
   if [ -n "$VERTEX_AI_KEY" ]; then
-    vertex_ai_key_b64=$(echo -n "$VERTEX_AI_KEY" | base64)
+    vertex_ai_key_b64=$(echo -n "$VERTEX_AI_KEY" | base64 | tr -d '\n')
   fi
 
   # Optional: GCP Service Account Key
@@ -120,7 +121,7 @@ generate_secrets_for_env() {
   if [ -n "$GCP_SA_KEY_FILE" ] && [ -f "$GCP_SA_KEY_FILE" ]; then
     gcp_sa_key_b64=$(base64 < "$GCP_SA_KEY_FILE" | tr -d '\n')
   elif [ -n "$GCP_SA_KEY_JSON" ]; then
-    gcp_sa_key_b64=$(echo -n "$GCP_SA_KEY_JSON" | base64)
+    gcp_sa_key_b64=$(echo -n "$GCP_SA_KEY_JSON" | base64 | tr -d '\n')
   fi
 
   echo -e "${GREEN}Writing secrets to: ${YELLOW}${output_file}${NC}"
