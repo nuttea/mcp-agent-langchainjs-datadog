@@ -39,12 +39,11 @@ COPY --from=builder /app/packages/burger-mcp/lib ./lib
 # Copy all node_modules from builder (workspace installs at root level)
 COPY --from=builder /app/node_modules ./node_modules
 
-# Create non-root user
-RUN addgroup -g 1000 nodejs && \
-    adduser -u 1000 -G nodejs -s /bin/sh -D nodejs && \
-    chown -R nodejs:nodejs /app
+# Create non-root user for security (required by K8s security policies)
+# Use node user that already exists in node:22-alpine
+RUN chown -R node:node /app
 
-USER nodejs
+USER node
 
 EXPOSE 3000
 

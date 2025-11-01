@@ -40,12 +40,11 @@ COPY --from=builder /app/packages/agent-api/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 
 # Create non-root user for security (required by K8s security policies)
-RUN addgroup -g 1000 nodejs && \
-    adduser -u 1000 -G nodejs -s /bin/sh -D nodejs && \
-    chown -R nodejs:nodejs /app
+# Use node user that already exists in node:22-alpine
+RUN chown -R node:node /app
 
 # Switch to non-root user
-USER nodejs
+USER node
 
 # Expose port
 EXPOSE 8080
