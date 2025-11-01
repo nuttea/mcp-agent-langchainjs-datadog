@@ -1,0 +1,14 @@
+# Build from repository root context
+FROM node:22-alpine AS builder
+WORKDIR /app
+COPY package*.json ./
+COPY packages/ ./packages/
+RUN npm ci
+WORKDIR /app/packages/burger-webapp
+RUN npm run build
+
+FROM nginx:alpine
+COPY --from=builder /app/packages/burger-webapp/dist /usr/share/nginx/html
+COPY packages/burger-webapp/nginx.conf /etc/nginx/conf.d/default.conf
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
