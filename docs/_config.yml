@@ -1,0 +1,51 @@
+title: MCP Agent LangChain.js + Datadog
+description: Production-ready AI agents with LangChain.js, Kubernetes, and Datadog observability
+theme: jekyll-theme-cayman
+show_downloads: false
+
+# GitHub repository
+repository: Azure-Samples/mcp-agent-langchainjs
+
+# Navigation
+navigation:
+  - title: Home
+    url: /
+  - title: Deployment
+    url: /deployment/
+  - title: Testing
+    url: /testing/
+  - title: Monitoring
+    url: /monitoring/
+  - title: Architecture
+    url: /architecture/
+
+# Plugins
+plugins:
+  - jekyll-relative-links
+  - jekyll-optional-front-matter
+  - jekyll-readme-index
+  - jekyll-default-layout
+  - jekyll-titles-from-headings
+
+# Plugin settings
+relative_links:
+  enabled: true
+  collections: true
+
+titles_from_headings:
+  enabled: true
+  strip_title: true
+  collections: true
+
+# Markdown
+markdown: kramdown
+kramdown:
+  input: GFM
+  syntax_highlighter: rouge
+  syntax_highlighter_opts:
+    default_lang: bash
+
+# Exclude from processing
+exclude:
+  - DOCUMENTATION_ORGANIZATION.md
+  - agent.ipynb.md

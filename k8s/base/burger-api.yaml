@@ -1,0 +1,130 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: burger-api
+  labels:
+    tags.datadoghq.com/env: "dev"
+    tags.datadoghq.com/service: "burger-api"
+    tags.datadoghq.com/version: "1.0.0"
+    app: mcp-agent
+    service: burger-api
+    component: backend-api
+    
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mcp-agent
+      service: burger-api
+      
+  template:
+    metadata:
+      labels:
+        tags.datadoghq.com/env: "dev"
+        tags.datadoghq.com/service: "burger-api"
+        tags.datadoghq.com/version: "1.0.0"
+        app: mcp-agent
+        service: burger-api
+        component: backend-api
+        
+      annotations:
+        ad.datadoghq.com/burger-api.logs: '[{"source": "nodejs", "service": "burger-api", "log_processing_rules": [{"type": "multi_line", "name": "log_start_with_date", "pattern": "\\d{4}-(0?[1-9]|1[012])-(0?[1-9]|[12][0-9]|3[01])"}]}]'
+    spec:
+      # Pod-level security context
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: burger-api
+        image: gcr.io/datadog-ese-sandbox/burger-api:latest
+        imagePullPolicy: Always
+        # Container-level security context
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          runAsNonRoot: true
+          runAsUser: 1000
+        ports:
+        - containerPort: 8080
+          name: http
+        envFrom:
+        - configMapRef:
+            name: app-config
+        env:
+        - name: DD_ENV
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.labels['tags.datadoghq.com/env']
+        - name: DD_SERVICE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.labels['tags.datadoghq.com/service']
+        - name: DD_VERSION
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.labels['tags.datadoghq.com/version']
+        - name: DD_LOGS_INJECTION
+          value: "true"
+        - name: DD_TRACE_SAMPLE_RATE
+          value: "1"
+        - name: DD_PROFILING_ENABLED
+          value: "true"
+        - name: PORT
+          value: "8080"
+        - name: NODE_ENV
+          value: "production"
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: postgres-password
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /api
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /api
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        startupProbe:
+          httpGet:
+            path: /api
+            port: 8080
+          failureThreshold: 30
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: burger-api
+  labels:
+    app: mcp-agent
+    service: burger-api
+    
+spec:
+  selector:
+    app: mcp-agent
+    service: burger-api
+    
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  type: ClusterIP

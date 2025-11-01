@@ -2,7 +2,6 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: postgres-secret
-  namespace: mcp-agent-dev
 type: Opaque
 stringData:
   POSTGRES_USER: burgerapp
@@ -13,7 +12,6 @@ apiVersion: v1
 kind: Service
 metadata:
   name: postgres
-  namespace: mcp-agent-dev
   labels:
     app: postgres
 spec:
@@ -30,7 +28,6 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: postgres
-  namespace: mcp-agent-dev
 spec:
   serviceName: postgres
   replicas: 1
@@ -96,9 +93,24 @@ spec:
           }
         ad.datadoghq.com/postgres.logs: '[{"source":"postgresql","service":"postgres"}]'
     spec:
+      # Pod-level security context (postgres runs as UID 999 or 70 depending on image)
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: postgres
         image: postgres:16-alpine
+        # Container-level security context
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          runAsNonRoot: true
+          runAsUser: 999
         ports:
         - containerPort: 5432
           name: postgres

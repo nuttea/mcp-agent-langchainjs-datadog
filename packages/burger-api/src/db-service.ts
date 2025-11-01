@@ -97,9 +97,11 @@ export class DbService {
         return result.rows.map(row => ({
           id: row.id,
           name: row.name,
-          description: row.description,
+          description: row.description || '',
           price: parseFloat(row.price),
-          image: row.image,
+          // Strip leading /images/ prefix since express-server adds /api/images/ prefix
+          imageUrl: (row.image || '').replace(/^\/images\//, ''),
+          toppings: [], // Database doesn't store default toppings array
         }));
       } catch (error) {
         console.error('Error fetching burgers from PostgreSQL:', error);
@@ -119,9 +121,11 @@ export class DbService {
         return {
           id: row.id,
           name: row.name,
-          description: row.description,
+          description: row.description || '',
           price: parseFloat(row.price),
-          image: row.image,
+          // Strip leading /images/ prefix since express-server adds /api/images/ prefix
+          imageUrl: (row.image || '').replace(/^\/images\//, ''),
+          toppings: [], // Database doesn't store default toppings array
         };
       } catch (error) {
         console.error(`Error fetching burger ${id} from PostgreSQL:`, error);
@@ -140,8 +144,10 @@ export class DbService {
         return result.rows.map(row => ({
           id: row.id,
           name: row.name,
+          description: '', // Database doesn't store topping description
           category: row.category as ToppingCategory,
           price: parseFloat(row.price),
+          imageUrl: row.image || '', // Map image column to imageUrl
         }));
       } catch (error) {
         console.error('Error fetching toppings from PostgreSQL:', error);
@@ -161,8 +167,10 @@ export class DbService {
         return {
           id: row.id,
           name: row.name,
+          description: '', // Database doesn't store topping description
           category: row.category as ToppingCategory,
           price: parseFloat(row.price),
+          imageUrl: row.image || '', // Map image column to imageUrl
         };
       } catch (error) {
         console.error(`Error fetching topping ${id} from PostgreSQL:`, error);
@@ -196,10 +204,17 @@ export class DbService {
         const orders = result.rows.map(row => ({
           id: row.id,
           userId: row.user_id,
-          burgerId: row.burger_id,
-          toppingIds: row.topping_ids || [],
+          createdAt: row.created_at || new Date().toISOString(),
+          items: [
+            {
+              burgerId: row.burger_id,
+              quantity: 1,
+              extraToppingIds: row.topping_ids || [],
+            }
+          ],
+          estimatedCompletionAt: row.created_at || new Date().toISOString(), // Use created_at as fallback
+          totalPrice: parseFloat(row.total),
           status: row.status as OrderStatus,
-          total: parseFloat(row.total),
         }));
         return stripUserId(orders);
       } catch (error) {
@@ -223,10 +238,17 @@ export class DbService {
         const order: Order = {
           id: row.id,
           userId: row.user_id,
-          burgerId: row.burger_id,
-          toppingIds: row.topping_ids || [],
+          createdAt: row.created_at || new Date().toISOString(),
+          items: [
+            {
+              burgerId: row.burger_id,
+              quantity: 1,
+              extraToppingIds: row.topping_ids || [],
+            }
+          ],
+          estimatedCompletionAt: row.created_at || new Date().toISOString(),
+          totalPrice: parseFloat(row.total),
           status: row.status as OrderStatus,
-          total: parseFloat(row.total),
         };
 
         if (userId && order.userId !== userId) {
@@ -258,18 +280,28 @@ export class DbService {
   async createOrder(order: Order): Promise<Order> {
     if (this.isPostgresInitialized && this.pool) {
       try {
+        // Convert new format (items array) to old database format (single burger + toppings)
+        // For now, take the first item only since database schema supports single burger per order
+        const firstItem = order.items[0];
         const result = await this.pool.query(
           'INSERT INTO orders (id, user_id, burger_id, topping_ids, status, total) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
-          [order.id, order.userId, order.burgerId, order.toppingIds, order.status, order.total]
+          [order.id, order.userId, firstItem.burgerId, firstItem.extraToppingIds || [], order.status, order.totalPrice]
         );
         const row = result.rows[0];
         const createdOrder: Order = {
           id: row.id,
           userId: row.user_id,
-          burgerId: row.burger_id,
-          toppingIds: row.topping_ids || [],
+          createdAt: row.created_at || new Date().toISOString(),
+          items: [
+            {
+              burgerId: row.burger_id,
+              quantity: 1,
+              extraToppingIds: row.topping_ids || [],
+            }
+          ],
+          estimatedCompletionAt: order.estimatedCompletionAt,
+          totalPrice: parseFloat(row.total),
           status: row.status as OrderStatus,
-          total: parseFloat(row.total),
         };
         return stripUserId(createdOrder);
       } catch (error) {
@@ -303,10 +335,17 @@ export class DbService {
         const updatedOrder: Order = {
           id: row.id,
           userId: row.user_id,
-          burgerId: row.burger_id,
-          toppingIds: row.topping_ids || [],
+          createdAt: row.created_at || new Date().toISOString(),
+          items: [
+            {
+              burgerId: row.burger_id,
+              quantity: 1,
+              extraToppingIds: row.topping_ids || [],
+            }
+          ],
+          estimatedCompletionAt: row.created_at || new Date().toISOString(),
+          totalPrice: parseFloat(row.total),
           status: row.status as OrderStatus,
-          total: parseFloat(row.total),
         };
         return stripUserId(updatedOrder);
       } catch (error) {
@@ -387,17 +426,17 @@ export class DbService {
           setClauses.push(`status = $${paramIndex++}`);
           params.push(updates.status);
         }
-        if (updates.total !== undefined) {
+        if (updates.totalPrice !== undefined) {
           setClauses.push(`total = $${paramIndex++}`);
-          params.push(updates.total);
+          params.push(updates.totalPrice);
         }
-        if (updates.toppingIds !== undefined) {
+        if (updates.items !== undefined && updates.items.length > 0) {
+          // Convert new format to old database format
+          const firstItem = updates.items[0];
           setClauses.push(`topping_ids = $${paramIndex++}`);
-          params.push(updates.toppingIds);
-        }
-        if (updates.burgerId !== undefined) {
+          params.push(firstItem.extraToppingIds || []);
           setClauses.push(`burger_id = $${paramIndex++}`);
-          params.push(updates.burgerId);
+          params.push(firstItem.burgerId);
         }
 
         if (setClauses.length === 0) {
@@ -414,10 +453,17 @@ export class DbService {
         const updatedOrder: Order = {
           id: row.id,
           userId: row.user_id,
-          burgerId: row.burger_id,
-          toppingIds: row.topping_ids || [],
+          createdAt: row.created_at || new Date().toISOString(),
+          items: [
+            {
+              burgerId: row.burger_id,
+              quantity: 1,
+              extraToppingIds: row.topping_ids || [],
+            }
+          ],
+          estimatedCompletionAt: row.created_at || new Date().toISOString(),
+          totalPrice: parseFloat(row.total),
           status: row.status as OrderStatus,
-          total: parseFloat(row.total),
         };
         return stripUserId(updatedOrder);
       } catch (error) {

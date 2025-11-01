@@ -1,8 +1,13 @@
 #!/bin/bash
 
 # generate-secrets.sh
-# Generates Kubernetes secrets.yaml from environment variables
-# DO NOT commit the generated secrets.yaml file!
+# Generates Kubernetes secrets for both dev and prod environments
+# DO NOT commit the generated secrets files!
+#
+# Usage:
+#   ./k8s/scripts/generate-secrets.sh dev   # Generate for dev environment
+#   ./k8s/scripts/generate-secrets.sh prod  # Generate for prod environment
+#   ./k8s/scripts/generate-secrets.sh all   # Generate for both environments
 
 set -e
 
@@ -10,130 +15,223 @@ set -e
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Configuration
-NAMESPACE="${NAMESPACE:-mcp-agent-dev}"
-OUTPUT_FILE="${OUTPUT_FILE:-k8s/config/secrets.yaml}"
+# Parse environment argument
+ENV="${1:-dev}"
 
-echo -e "${GREEN}Generating Kubernetes secrets from environment variables...${NC}"
-echo ""
-
-# Check required environment variables
-MISSING_VARS=()
-
-if [ -z "$DD_API_KEY" ]; then
-  MISSING_VARS+=("DD_API_KEY")
-fi
-
-if [ -z "$OPENAI_API_KEY" ]; then
-  MISSING_VARS+=("OPENAI_API_KEY")
-fi
-
-# Report missing variables
-if [ ${#MISSING_VARS[@]} -ne 0 ]; then
-  echo -e "${RED}ERROR: Missing required environment variables:${NC}"
-  for var in "${MISSING_VARS[@]}"; do
-    echo -e "  ${RED}✗${NC} $var"
-  done
-  echo ""
-  echo -e "${YELLOW}Please set these variables before running this script:${NC}"
-  echo "  export DD_API_KEY='your-datadog-api-key'"
-  echo "  export OPENAI_API_KEY='your-openai-api-key'"
-  echo ""
+# Validate environment
+if [[ "$ENV" != "dev" && "$ENV" != "prod" && "$ENV" != "all" ]]; then
+  echo -e "${RED}ERROR: Invalid environment '${ENV}'${NC}"
+  echo "Usage: $0 [dev|prod|all]"
+  echo "  dev  - Generate secrets for dev environment (default)"
+  echo "  prod - Generate secrets for prod environment"
+  echo "  all  - Generate secrets for both environments"
   exit 1
 fi
 
-echo -e "${GREEN}✓${NC} All required environment variables are set"
+echo -e "${BLUE}╔════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${BLUE}║${NC}  ${GREEN}Kubernetes Secrets Generator${NC}                           ${BLUE}║${NC}"
+echo -e "${BLUE}║${NC}  Environment: ${YELLOW}${ENV}${NC}                                       ${BLUE}║${NC}"
+echo -e "${BLUE}╚════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 
-# Base64 encode the secrets (required for Kubernetes secrets)
-DD_API_KEY_B64=$(echo -n "$DD_API_KEY" | base64)
-OPENAI_API_KEY_B64=$(echo -n "$OPENAI_API_KEY" | base64)
+# Function to check and report environment variables
+check_env_vars() {
+  local missing_vars=()
 
-# Optional: Vertex AI key
-if [ -n "$VERTEX_AI_KEY" ]; then
-  VERTEX_AI_KEY_B64=$(echo -n "$VERTEX_AI_KEY" | base64)
-  echo -e "${GREEN}✓${NC} VERTEX_AI_KEY found (optional)"
-else
-  VERTEX_AI_KEY_B64=""
-  echo -e "${YELLOW}ℹ${NC} VERTEX_AI_KEY not set (optional)"
-fi
+  echo -e "${BLUE}Checking required environment variables...${NC}"
 
-# Optional: GCP Service Account Key (should be a JSON file path)
-if [ -n "$GCP_SA_KEY_FILE" ] && [ -f "$GCP_SA_KEY_FILE" ]; then
-  GCP_SA_KEY_B64=$(base64 < "$GCP_SA_KEY_FILE" | tr -d '\n')
-  echo -e "${GREEN}✓${NC} GCP_SA_KEY_FILE found (optional)"
-elif [ -n "$GCP_SA_KEY_JSON" ]; then
-  GCP_SA_KEY_B64=$(echo -n "$GCP_SA_KEY_JSON" | base64)
-  echo -e "${GREEN}✓${NC} GCP_SA_KEY_JSON found (optional)"
-else
-  GCP_SA_KEY_B64=""
-  echo -e "${YELLOW}ℹ${NC} GCP Service Account Key not set (optional)"
-fi
+  if [ -z "$DD_API_KEY" ]; then
+    missing_vars+=("DD_API_KEY")
+    echo -e "  ${RED}✗${NC} DD_API_KEY"
+  else
+    echo -e "  ${GREEN}✓${NC} DD_API_KEY"
+  fi
 
-echo ""
-echo -e "${GREEN}Generating secrets file: ${OUTPUT_FILE}${NC}"
+  if [ -z "$OPENAI_API_KEY" ]; then
+    missing_vars+=("OPENAI_API_KEY")
+    echo -e "  ${RED}✗${NC} OPENAI_API_KEY"
+  else
+    echo -e "  ${GREEN}✓${NC} OPENAI_API_KEY"
+  fi
 
-# Generate the secrets.yaml file
-cat > "$OUTPUT_FILE" <<EOF
+  # Check optional variables
+  if [ -n "$VERTEX_AI_KEY" ]; then
+    echo -e "  ${GREEN}✓${NC} VERTEX_AI_KEY (optional)"
+  else
+    echo -e "  ${YELLOW}ℹ${NC} VERTEX_AI_KEY not set (optional)"
+  fi
+
+  if [ -n "$GCP_SA_KEY_FILE" ] && [ -f "$GCP_SA_KEY_FILE" ]; then
+    echo -e "  ${GREEN}✓${NC} GCP_SA_KEY_FILE (optional)"
+  elif [ -n "$GCP_SA_KEY_JSON" ]; then
+    echo -e "  ${GREEN}✓${NC} GCP_SA_KEY_JSON (optional)"
+  else
+    echo -e "  ${YELLOW}ℹ${NC} GCP Service Account Key not set (optional)"
+  fi
+
+  echo ""
+
+  # Report missing variables
+  if [ ${#missing_vars[@]} -ne 0 ]; then
+    echo -e "${RED}ERROR: Missing required environment variables:${NC}"
+    for var in "${missing_vars[@]}"; do
+      echo -e "  ${RED}✗${NC} $var"
+    done
+    echo ""
+    echo -e "${YELLOW}Please set these variables before running this script:${NC}"
+    echo "  export DD_API_KEY='your-datadog-api-key'"
+    echo "  export OPENAI_API_KEY='your-openai-api-key'"
+    echo ""
+    return 1
+  fi
+
+  return 0
+}
+
+# Function to generate secrets for a specific environment
+generate_secrets_for_env() {
+  local target_env=$1
+  local namespace="mcp-agent-${target_env}"
+  local output_file="k8s/overlays/${target_env}/secrets.yaml"
+
+  echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+  echo -e "${GREEN}Generating secrets for ${YELLOW}${target_env}${GREEN} environment${NC}"
+  echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+  echo ""
+
+  # Create overlays directory if it doesn't exist
+  mkdir -p "k8s/overlays/${target_env}"
+
+  # Base64 encode the secrets (required for Kubernetes secrets)
+  local dd_api_key_b64=$(echo -n "$DD_API_KEY" | base64)
+  local openai_api_key_b64=$(echo -n "$OPENAI_API_KEY" | base64)
+
+  # Optional: Vertex AI key
+  local vertex_ai_key_b64=""
+  if [ -n "$VERTEX_AI_KEY" ]; then
+    vertex_ai_key_b64=$(echo -n "$VERTEX_AI_KEY" | base64)
+  fi
+
+  # Optional: GCP Service Account Key
+  local gcp_sa_key_b64=""
+  if [ -n "$GCP_SA_KEY_FILE" ] && [ -f "$GCP_SA_KEY_FILE" ]; then
+    gcp_sa_key_b64=$(base64 < "$GCP_SA_KEY_FILE" | tr -d '\n')
+  elif [ -n "$GCP_SA_KEY_JSON" ]; then
+    gcp_sa_key_b64=$(echo -n "$GCP_SA_KEY_JSON" | base64)
+  fi
+
+  echo -e "${GREEN}Writing secrets to: ${YELLOW}${output_file}${NC}"
+
+  # Generate the secrets.yaml file
+  cat > "$output_file" <<EOF
 # AUTO-GENERATED FILE - DO NOT COMMIT TO VERSION CONTROL
 # Generated: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
 # Generated by: k8s/scripts/generate-secrets.sh
+# Environment: ${target_env}
 #
 # This file contains base64-encoded secrets.
-# To regenerate: ./k8s/scripts/generate-secrets.sh
+# To regenerate: ./k8s/scripts/generate-secrets.sh ${target_env}
 
 apiVersion: v1
 kind: Secret
 metadata:
   name: app-secrets
-  namespace: $NAMESPACE
+  namespace: ${namespace}
   labels:
     app: mcp-agent
-    environment: dev
+    environment: ${target_env}
     managed-by: script
 type: Opaque
 data:
   # Datadog API Key (base64 encoded)
-  datadog-api-key: $DD_API_KEY_B64
+  datadog-api-key: ${dd_api_key_b64}
 
   # OpenAI API Key (base64 encoded)
-  openai-api-key: $OPENAI_API_KEY_B64
+  openai-api-key: ${openai_api_key_b64}
+
+  # PostgreSQL password (base64 encoded - references postgres-secret)
+  # Note: This duplicates the value from postgres-secret for compatibility
+  postgres-password: $(echo -n "changeme123" | base64)
 EOF
 
-# Add optional secrets if they exist
-if [ -n "$VERTEX_AI_KEY_B64" ]; then
-  cat >> "$OUTPUT_FILE" <<EOF
+  # Add optional secrets if they exist
+  if [ -n "$vertex_ai_key_b64" ]; then
+    cat >> "$output_file" <<EOF
 
   # Vertex AI Key (base64 encoded)
-  vertex-ai-key: $VERTEX_AI_KEY_B64
+  vertex-ai-key: ${vertex_ai_key_b64}
 EOF
-fi
+  fi
 
-if [ -n "$GCP_SA_KEY_B64" ]; then
-  cat >> "$OUTPUT_FILE" <<EOF
+  if [ -n "$gcp_sa_key_b64" ]; then
+    cat >> "$output_file" <<EOF
 
   # GCP Service Account Key JSON (base64 encoded)
-  gcp-sa-key: $GCP_SA_KEY_B64
+  gcp-sa-key: ${gcp_sa_key_b64}
 EOF
+  fi
+
+  # Add final newline
+  echo "" >> "$output_file"
+
+  echo -e "${GREEN}✓${NC} Secrets file generated successfully!"
+  echo -e "  File: ${YELLOW}${output_file}${NC}"
+  echo -e "  Namespace: ${YELLOW}${namespace}${NC}"
+  echo ""
+}
+
+# Check environment variables first
+check_env_vars || exit 1
+
+# Generate secrets based on ENV parameter
+if [ "$ENV" = "all" ]; then
+  echo -e "${BLUE}Generating secrets for ALL environments...${NC}"
+  echo ""
+
+  generate_secrets_for_env "dev"
+  echo ""
+  generate_secrets_for_env "prod"
+
+  echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+  echo -e "${GREEN}All secrets generated successfully!${NC}"
+  echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+else
+  generate_secrets_for_env "$ENV"
 fi
 
-# Add final newline
-echo "" >> "$OUTPUT_FILE"
+echo ""
+echo -e "${YELLOW}╔════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${YELLOW}║${NC}  ${RED}IMPORTANT SECURITY NOTES${NC}                               ${YELLOW}║${NC}"
+echo -e "${YELLOW}╚════════════════════════════════════════════════════════════╝${NC}"
+echo -e "  1. The generated files contain ${RED}REAL SECRETS${NC}"
+echo -e "  2. These files are in ${GREEN}.gitignore${NC} and will NOT be committed"
+echo -e "  3. ${RED}DO NOT${NC} manually add these files to git"
+echo -e "  4. Each team member should generate their own secrets files"
+echo ""
+echo -e "${BLUE}╔════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${BLUE}║${NC}  ${GREEN}NEXT STEPS${NC}                                             ${BLUE}║${NC}"
+echo -e "${BLUE}╚════════════════════════════════════════════════════════════╝${NC}"
 
-echo -e "${GREEN}✓${NC} Secrets file generated successfully!"
+if [ "$ENV" = "all" ]; then
+  echo -e "${GREEN}Apply secrets to dev:${NC}"
+  echo -e "  ${YELLOW}kubectl apply -f k8s/overlays/dev/secrets.yaml${NC}"
+  echo ""
+  echo -e "${GREEN}Apply secrets to prod:${NC}"
+  echo -e "  ${YELLOW}kubectl apply -f k8s/overlays/prod/secrets.yaml${NC}"
+else
+  echo -e "${GREEN}Apply secrets to ${ENV}:${NC}"
+  echo -e "  ${YELLOW}kubectl apply -f k8s/overlays/${ENV}/secrets.yaml${NC}"
+fi
+
 echo ""
-echo -e "${YELLOW}IMPORTANT SECURITY NOTES:${NC}"
-echo -e "  1. The file ${RED}$OUTPUT_FILE${NC} contains real secrets"
-echo -e "  2. This file is in ${GREEN}.gitignore${NC} and will NOT be committed"
-echo -e "  3. ${RED}DO NOT${NC} manually add this file to git"
-echo -e "  4. Each team member should generate their own secrets file"
-echo ""
-echo -e "${GREEN}Next steps:${NC}"
-echo "  Apply secrets to your cluster:"
-echo -e "    ${YELLOW}kubectl apply -f $OUTPUT_FILE${NC}"
-echo ""
-echo "  Or use the deployment script:"
-echo -e "    ${YELLOW}./k8s/scripts/deploy.sh${NC}"
+echo -e "${GREEN}Or use Kustomize:${NC}"
+if [ "$ENV" = "all" ]; then
+  echo -e "  ${YELLOW}make k8s-apply ENV=dev${NC}"
+  echo -e "  ${YELLOW}make k8s-apply ENV=prod${NC}"
+else
+  echo -e "  ${YELLOW}make k8s-apply ENV=${ENV}${NC}"
+fi
 echo ""

@@ -1,0 +1,78 @@
+---
+# HTTPRoute for Prod Environment
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: mcp-agent-prod-route
+  namespace: mcp-agent-prod
+spec:
+  parentRefs:
+  - name: shared-gateway
+    namespace: shared-infra
+    sectionName: http
+  hostnames:
+  - "platform-engineering-demo.dev"
+  - "www.platform-engineering-demo.dev"
+  - "burgers.platform-engineering-demo.dev"
+  - "api.platform-engineering-demo.dev"
+  - "burger-api.platform-engineering-demo.dev"
+  rules:
+  # Main domain - Agent Webapp
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /
+      headers:
+      - name: host
+        value: platform-engineering-demo.dev
+    backendRefs:
+    - name: agent-webapp
+      port: 80
+
+  # WWW domain - Agent Webapp
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /
+      headers:
+      - name: host
+        value: www.platform-engineering-demo.dev
+    backendRefs:
+    - name: agent-webapp
+      port: 80
+
+  # Burger Webapp
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /
+      headers:
+      - name: host
+        value: burgers.platform-engineering-demo.dev
+    backendRefs:
+    - name: burger-webapp
+      port: 80
+
+  # Agent API - Direct API access (optional, for debugging)
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /
+      headers:
+      - name: host
+        value: api.platform-engineering-demo.dev
+    backendRefs:
+    - name: agent-api
+      port: 8080
+
+  # Burger API - Direct API access (optional, for debugging)
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /
+      headers:
+      - name: host
+        value: burger-api.platform-engineering-demo.dev
+    backendRefs:
+    - name: burger-api
+      port: 8080

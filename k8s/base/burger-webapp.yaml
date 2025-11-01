@@ -1,0 +1,106 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: burger-webapp
+  labels:
+    tags.datadoghq.com/env: "dev"
+    tags.datadoghq.com/service: "burger-webapp"
+    tags.datadoghq.com/version: "1.0.0"
+    app: mcp-agent
+    service: burger-webapp
+    component: frontend
+    
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mcp-agent
+      service: burger-webapp
+      
+  template:
+    metadata:
+      labels:
+        tags.datadoghq.com/env: "dev"
+        tags.datadoghq.com/service: "burger-webapp"
+        tags.datadoghq.com/version: "1.0.0"
+        app: mcp-agent
+        service: burger-webapp
+        component: frontend
+        
+      annotations:
+        ad.datadoghq.com/burger-webapp.logs: '[{"source": "nginx", "service": "burger-webapp"}]'
+    spec:
+      # Pod-level security context (nginx official image runs as root)
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: burger-webapp
+        image: gcr.io/datadog-ese-sandbox/burger-webapp:latest
+        imagePullPolicy: Always
+        # Container-level security context
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+            add:
+              - CHOWN
+              - SETGID
+              - SETUID
+              - NET_BIND_SERVICE
+        ports:
+        - containerPort: 80
+          name: http
+        env:
+        - name: DD_ENV
+          value: "dev"
+        - name: DD_SERVICE
+          value: "burger-webapp"
+        - name: DD_VERSION
+          value: "1.0.0"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        startupProbe:
+          httpGet:
+            path: /
+            port: 80
+          failureThreshold: 30
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: burger-webapp
+  labels:
+    app: mcp-agent
+    service: burger-webapp
+    
+spec:
+  selector:
+    app: mcp-agent
+    service: burger-webapp
+    
+  ports:
+  - port: 80
+    targetPort: 80
+    protocol: TCP
+    name: http
+  type: LoadBalancer

@@ -2,46 +2,120 @@
 
 <img src="./packages/agent-webapp/public/favicon.png" alt="" align="center" height="64" />
 
-# AI Agent with MCP tools using LangChain.js
+# AI Agent with MCP tools using LangChain.js + Datadog Observability
 
-[![Open in Codespaces](https://img.shields.io/badge/Codespaces-Open-blue?style=flat-square&logo=github)](https://codespaces.new/Azure-Samples/mcp-agent-langchainjs?hide_repo_select=true&ref=main&quickstart=true)
-[![Join Azure AI Community Discord](https://img.shields.io/badge/Discord-Azure_AI_Community-blue?style=flat-square&logo=discord&color=5865f2&logoColor=fff)](https://aka.ms/foundry/discord)
-[![Deployment time](https://img.shields.io/badge/Deployment-15min-teal?style=flat-square)](#deploy-to-azure)
+[![Kubernetes](https://img.shields.io/badge/Kubernetes-Deployment-blue?style=flat-square&logo=kubernetes)](https://kubernetes.io/)
+[![Datadog](https://img.shields.io/badge/Datadog-Observability-purple?style=flat-square&logo=datadog)](https://www.datadoghq.com/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-blue?style=flat-square&logo=postgresql)](https://www.postgresql.org/)
 <br>
-[![Build Status](https://img.shields.io/github/actions/workflow/status/Azure-Samples/mcp-agent-langchainjs/build-test.yaml?style=flat-square&label=Build)](https://github.com/Azure-Samples/mcp-agent-langchainjs/actions)
-[![dev.to blog post walkthrough](https://img.shields.io/badge/Blog%20post-black?style=flat-square&logo=dev.to)](https://dev.to/azure/serverless-mcp-agent-with-langchainjs-v1-burgers-tools-and-traces-25oo)
-![Node version](https://img.shields.io/badge/Node.js->=22-3c873a?style=flat-square)
+![Node version](https://img.shields.io/badge/Node.js->=18-3c873a?style=flat-square)
 [![TypeScript](https://img.shields.io/badge/TypeScript-blue?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![License](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE)
 
 ⭐ If you like this sample, star it on GitHub — it helps a lot!
 
-[Overview](#overview) • [Architecture](#architecture) • [Getting started](#getting-started) • [Deploy to Azure](#deploy-to-azure) • [Run locally](#run-locally) • [MCP tools](#mcp-tools) • [Resources](#resources)
+[Overview](#overview) • [Architecture](#architecture) • [Getting started](#getting-started) • [Deploy to Kubernetes](#deploy-to-kubernetes) • [Observability](#observability) • [Documentation](#documentation) • [Resources](#resources)
 
 ![Animation showing the agent in action](./docs/images/demo.gif)
 
 </div>
 
+> **📌 About This Fork**
+> This repository is forked from [Azure-Samples/mcp-agent-langchainjs](https://github.com/Azure-Samples/mcp-agent-langchainjs) and enhanced with:
+> - **Kubernetes-native deployment** - Works with any Kubernetes cluster (GKE, EKS, AKS, on-premises)
+> - **PostgreSQL database** - Replaces Azure Cosmos DB with PostgreSQL for standard SQL compatibility
+> - **Datadog observability** - End-to-end instrumentation with APM, DBM, and distributed tracing
+> - **Comprehensive testing** - 31+ integration tests for APIs and database operations
+> - **Production-ready infrastructure** - Kubernetes manifests, ConfigMaps, Secrets, and StatefulSets
+>
+> **Credits:** Original project by the [Azure AI team](https://github.com/Azure-Samples). Thank you for the excellent foundation! 🙏
+
 ## Overview
 
-This project demonstrates how to build AI agents that can interact with real-world APIs using the **Model Context Protocol (MCP)**. It features a complete burger ordering system with a serverless API, web interfaces, and an MCP server that enables AI agents to browse menus, place orders, and track order status. The agent uses **LangChain.js** to handle LLM reasoning and tool calling. The system consists of multiple interconnected services, as detailed in the [Architecture](#architecture) section below.
+This project demonstrates how to build AI agents that can interact with real-world APIs using the **Model Context Protocol (MCP)**. It features a complete burger ordering system with a REST API, web interfaces, and an MCP server that enables AI agents to browse menus, place orders, and track order status. The agent uses **LangChain.js** to handle LLM reasoning and tool calling.
 
-The system is hosted on [Azure Static Web Apps](https://learn.microsoft.com/azure/static-web-apps/overview) (web apps) and [Azure Functions](https://learn.microsoft.com/azure/azure-functions/functions-overview?pivots=programming-language-javascript) (API and MCP servers), with [Azure Cosmos DB for NoSQL](https://learn.microsoft.com/azure/cosmos-db/nosql/) for data storage. You can use it as a starting point for building your own AI agents.
+### What Makes This Fork Different
+
+**Original Azure Version:**
+- Serverless architecture (Azure Functions, Azure Static Web Apps)
+- Azure Cosmos DB for NoSQL
+- Azure-specific deployment with Azure Developer CLI
+
+**This Kubernetes + Datadog Version:**
+- **Kubernetes-native deployment** to any cluster (GKE, EKS, AKS, Minikube, etc.)
+- **PostgreSQL database** with connection pooling and optimized queries
+- **Datadog end-to-end observability:**
+  - Application Performance Monitoring (APM) with distributed tracing
+  - Database Monitoring (DBM) with query metrics and execution plans
+  - DBM-APM correlation linking database queries to application traces
+  - Custom metrics and dashboards
+- **Production-ready features:**
+  - Health checks and liveness/readiness probes
+  - Resource limits and requests
+  - Horizontal Pod Autoscaling support
+  - Persistent storage with StatefulSets
+  - Comprehensive test suite (31+ tests)
 
 <!-- > [!TIP]
 > You can test this application locally without deployment needed or any cloud costs. The MCP server works with popular AI tools like GitHub Copilot, Claude, and other MCP-compatible clients. -->
 
-### Key features
+### Key Features
 
+**Core Functionality:**
 - LangChain.js agent with tool calling via MCP (Streamable HTTP transport)
-- Multi-service, end‑to‑end architecture (web UIs, APIs, MCP server)
-- User authentication with sessions history
-- 100% serverless architecture, for cost-effective scaling
-- Single-command deployment using Infrastructure as Code (IaC)
+- Multi-service, end-to-end architecture (web UIs, APIs, MCP server)
+- User authentication with session history stored in PostgreSQL
+- Chat history persistence across sessions
+
+**Kubernetes & Infrastructure:**
+- Deploy to any Kubernetes cluster (GKE, EKS, AKS, on-premises)
+- Kubernetes manifests with ConfigMaps, Secrets, and StatefulSets
+- Health checks, liveness/readiness probes
+- Horizontal Pod Autoscaling ready
+- Persistent storage for PostgreSQL
+
+**Observability with Datadog:**
+- Application Performance Monitoring (APM) with distributed tracing
+- Database Monitoring (DBM) with query metrics and execution plans
+- DBM-APM correlation for end-to-end visibility
+- Custom instrumentation with dd-trace
+- Real-time metrics and dashboards
+
+**Testing & Quality:**
+- 31+ integration tests (Jest + TypeScript)
+- Database integration tests
+- API endpoint tests
+- Concurrent operations testing
+
+## Observability
+
+This fork includes comprehensive **Datadog observability** throughout the entire application stack:
+
+### Application Performance Monitoring (APM)
+
+- **Distributed Tracing:** Track requests across all services (Agent API → Burger MCP → Burger API → PostgreSQL)
+- **Custom Instrumentation:** dd-trace integration in Node.js applications
+- **Service Maps:** Visual representation of service dependencies and call patterns
+- **Performance Metrics:** Response times, error rates, throughput for all endpoints
+
+### Database Monitoring (DBM)
+
+- **Query Metrics:** Execution time, frequency, and resource usage for all SQL queries
+- **Query Samples:** Actual query examples with EXPLAIN plans for optimization
+- **Blocking Queries:** Detection of database locks and blocking operations
+- **Schema Collection:** Database structure and table statistics
+
+### DBM-APM Correlation
+
+- **End-to-End Visibility:** Link database queries to the application traces that generated them
+- **Trace Context Propagation:** SQL comments contain trace IDs for correlation
+- **Performance Debugging:** Identify slow queries in the context of user requests
+
+See [docs/monitoring/](./docs/monitoring/) for detailed setup and configuration.
 
 ## Architecture
 
-Building AI applications can be complex and time-consuming, but using LangChain.js and Azure serverless technologies allows to greatly simplify the process. This application is a AI agent that can be access through different interfaces (web app, CLI) and that can call tools through MCP to interact with a burger ordering API.
+This application demonstrates how to build production-ready AI agents using LangChain.js, Kubernetes, and modern observability practices. The agent can be accessed through different interfaces (web app, CLI) and uses MCP to interact with a burger ordering API, with full observability provided by Datadog.
 
 ![Architecture diagram](docs/images/architecture.drawio.png?raw=true)
 
@@ -54,7 +128,9 @@ The application is made from these main components:
 | Burger API        | [`packages/burger-api`](./packages/burger-api)       | Core burger & order management web API       |
 | Burger MCP Server | [`packages/burger-mcp`](./packages/burger-mcp)       | Exposes burger API as MCP tools              |
 | Burger Web App    | [`packages/burger-webapp`](./packages/burger-webapp) | Live orders visualization                    |
-| Infrastructure    | [`infra`](./infra)                                   | Bicep templates (IaC)                        |
+| PostgreSQL        | Kubernetes StatefulSet                               | Database for burgers, orders, and users      |
+| Infrastructure    | [`k8s/`](./k8s)                                      | Kubernetes manifests (dev & prod)            |
+| Azure Infra       | [`infra/`](./infra)                                  | Original Azure Bicep templates (legacy)      |
 
 Additionally, these support components are included:
 
@@ -62,6 +138,7 @@ Additionally, these support components are included:
 | --------------- | ------------------------------------------------ | -------------------------------------------------------- |
 | Agent CLI       | [`packages/agent-cli`](./packages/agent-cli)     | Command-line interface LangChain.js agent and MCP client |
 | Data generation | [`packages/burger-data`](./packages/burger-data) | Scripts to (re)generate burgers data & images            |
+| Documentation   | [`docs/`](./docs)                                | Comprehensive guides for deployment, testing, monitoring |
 
 ## Getting started
 
@@ -110,34 +187,115 @@ Then you can get the project code:
 
 </details>
 
-## Deploy to Azure
+## Deploy to Kubernetes
+
+This fork is designed to deploy to any Kubernetes cluster (GKE, EKS, AKS, Minikube, etc.).
 
 ### Prerequisites
 
-- **Azure account**: If you're new to Azure, [get an Azure account for free](https://azure.microsoft.com/free) to get free Azure credits to get started
-- **Azure account permissions**: Your Azure account must have `Microsoft.Authorization/roleAssignments/write` permissions, such as [Role Based Access Control Administrator](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles#role-based-access-control-administrator-preview), [User Access Administrator](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles#user-access-administrator), or [Owner](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles#owner)
+- **Kubernetes cluster**: Any Kubernetes cluster (GKE, EKS, AKS, or local Minikube/Kind)
+- **kubectl**: [Install kubectl](https://kubernetes.io/docs/tasks/tools/)
+- **Docker** (optional): For building custom images
+- **OpenAI API key**: [Get one from OpenAI](https://platform.openai.com/api-keys)
+- **Datadog account** (optional): [Sign up for Datadog](https://www.datadoghq.com/) for observability
 
-### Deploy with Azure Developer CLI
+### Quick Start - Deploy to GKE
 
-1. Open a terminal and navigate to the root of the project
-2. Authenticate with Azure by running `azd auth login`
-3. Run `azd up` to deploy the application to Azure. This will provision Azure resources and deploy all services
-   - You will be prompted to select a base location for the resources
-   - The deployment process will take a few minutes
+For detailed instructions, see [docs/deployment/QUICKSTART_GKE_UPDATED.md](./docs/deployment/QUICKSTART_GKE_UPDATED.md)
 
-Once deployment is complete, you'll see the URLs of all deployed services in the terminal.
+```bash
+# 1. Create GKE cluster (if needed)
+gcloud container clusters create mcp-agent-cluster \
+  --zone=us-central1-a \
+  --num-nodes=3
 
-### Cost estimation
+# 2. Create namespace
+kubectl create namespace mcp-agent-dev
 
-Pricing varies per region and usage, so it isn't possible to predict exact costs for your usage. However, you can use the Azure pricing calculator with pre-configured estimations to get an idea of the costs: [Azure Pricing Calculator](https://azure.com/e/0ddf5e6a4c654576a74b7199c85413b9).
+# 3. Create secrets
+kubectl create secret generic postgres-secret \
+  --from-literal=POSTGRES_USER=burgerapp \
+  --from-literal=POSTGRES_PASSWORD=your-secure-password \
+  --from-literal=POSTGRES_DB=burgerdb \
+  -n mcp-agent-dev
+
+kubectl create secret generic openai-secret \
+  --from-literal=OPENAI_API_KEY=your-openai-api-key \
+  -n mcp-agent-dev
+
+kubectl create secret generic datadog-secret \
+  --from-literal=DD_API_KEY=your-datadog-api-key \
+  -n mcp-agent-dev
+
+# 4. Deploy application
+kubectl apply -k k8s/dev/
+
+# 5. Wait for deployments
+kubectl rollout status deployment/agent-api -n mcp-agent-dev
+kubectl rollout status deployment/burger-api -n mcp-agent-dev
+
+# 6. Access services
+kubectl get svc -n mcp-agent-dev
+```
+
+### Deploy to Other Kubernetes Platforms
+
+**Amazon EKS:**
+```bash
+eksctl create cluster --name mcp-agent-cluster --region us-west-2
+# Follow the same deployment steps above
+```
+
+**Azure AKS:**
+```bash
+az aks create --resource-group myResourceGroup --name mcp-agent-cluster
+az aks get-credentials --resource-group myResourceGroup --name mcp-agent-cluster
+# Follow the same deployment steps above
+```
+
+**Local Minikube:**
+```bash
+minikube start --memory=4096 --cpus=2
+# Follow the same deployment steps above
+```
+
+For comprehensive deployment guides:
+- **GKE Complete Setup:** [docs/deployment/GKE_COMPLETE_SETUP.md](./docs/deployment/GKE_COMPLETE_SETUP.md)
+- **Production Deployment:** [docs/deployment/DEPLOY_TO_PROD.md](./docs/deployment/DEPLOY_TO_PROD.md)
+- **Secrets Management:** [docs/deployment/SECRETS_MANAGEMENT.md](./docs/deployment/SECRETS_MANAGEMENT.md)
 
 ### Clean up resources
 
-To clean up all the Azure resources created by this sample:
+To remove all deployed resources:
 
 ```bash
-azd down --purge
+# Delete namespace (removes all resources)
+kubectl delete namespace mcp-agent-dev
+
+# Delete GKE cluster (if using GKE)
+gcloud container clusters delete mcp-agent-cluster --zone=us-central1-a
 ```
+
+---
+
+<details>
+<summary><h3>Deploy to Azure (Original)</h3></summary>
+
+The original Azure deployment is still available using Azure Developer CLI:
+
+**Prerequisites:**
+- Azure account with appropriate permissions
+- Azure Developer CLI installed
+
+**Deploy:**
+```bash
+azd auth login
+azd up
+```
+
+See [infra/](./infra) for Azure Bicep templates.
+
+</details>
 
 ## Run locally
 
@@ -245,6 +403,26 @@ Then, you can use GitHub Copilot in **agent mode** to interact with the MCP serv
 
 > [!TIP]
 > Copilot models can behave differently regarding tools usage, so if you don't see it calling the `burger-mcp` tools, you can explicitly mention using the Bruger MCP server by adding `#burger-mcp` in your prompt.
+
+## Documentation
+
+Comprehensive documentation is available in the [`docs/`](./docs/) directory:
+
+**[📖 View Full Documentation on GitHub Pages](https://azure-samples.github.io/mcp-agent-langchainjs/)**
+
+- **[docs/](./docs/README.md)** - Main documentation index
+- **[docs/deployment/](./docs/deployment/)** - GKE deployment guides and Kubernetes setup
+- **[docs/testing/](./docs/testing/)** - Testing guides and test infrastructure
+- **[docs/monitoring/](./docs/monitoring/)** - Datadog APM and DBM setup
+- **[docs/architecture/](./docs/architecture/)** - System architecture and design
+
+### Quick Links
+
+- **[Test Quick Start](./docs/testing/TEST_QUICKSTART.md)** - Get started with tests in 5 minutes
+- **[GKE Deployment Quick Start](./docs/deployment/QUICKSTART_GKE_UPDATED.md)** - Deploy to GKE quickly
+- **[Production Deployment](./docs/deployment/DEPLOY_TO_PROD_QUICKSTART.md)** - Deploy to production
+- **[Testing Guide](./docs/testing/TESTING.md)** - Comprehensive testing documentation
+- **[DBM Validation](./docs/monitoring/DBM_VALIDATION_REPORT.md)** - Database monitoring setup
 
 ## Resources
 

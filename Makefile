@@ -26,13 +26,17 @@ help:
 	@echo "  make docker-build-burger-mcp     - Build and push burger-mcp only"
 	@echo "  Example: make docker-build-agent-api IMAGE_TAG=v1.0.0"
 	@echo ""
-	@echo "Kubernetes (ENV=dev|prod):"
-	@echo "  make k8s-apply        - Apply all K8s manifests to dev"
-	@echo "  make k8s-delete       - Delete all K8s resources from dev"
-	@echo "  make deploy           - Full deployment (build + push + apply)"
-	@echo "  make k8s-status       - Show K8s pods/services status"
-	@echo "  make k8s-logs         - Tail logs from K8s pods"
-	@echo "  make k8s-restart      - Restart all deployments (supports ENV=prod)"
+	@echo "Kubernetes (ENV=dev|prod) - Using Kustomize:"
+	@echo "  make k8s-apply           - Apply K8s manifests (default: dev)"
+	@echo "  make k8s-apply-dev       - Apply to dev environment"
+	@echo "  make k8s-apply-prod      - Apply to prod environment"
+	@echo "  make k8s-delete          - Delete K8s resources from ENV"
+	@echo "  make k8s-diff            - Show diff for ENV"
+	@echo "  make deploy              - Full deployment (build + push + apply)"
+	@echo "  make k8s-status          - Show K8s pods/services status"
+	@echo "  make k8s-logs            - Tail logs from K8s pods"
+	@echo "  make k8s-restart         - Restart all deployments"
+	@echo "  Example: make k8s-apply ENV=prod"
 	@echo ""
 	@echo "Deploy Individual Services (ENV=dev|prod):"
 	@echo "  make deploy-agent-api      - Build, push, and restart agent-api"
@@ -51,8 +55,14 @@ help:
 	@echo "  Example: make port-forward-agent ENV=prod"
 	@echo ""
 	@echo "Environment:"
-	@echo "  make env-check        - Check if .env file exists"
-	@echo "  make secrets-generate - Generate K8s secrets from .env"
+	@echo "  make env-check              - Check if .env file exists"
+	@echo "  make secrets-generate       - Generate K8s secrets from .env for ENV"
+	@echo "                                (automatically run before deployments)"
+	@echo ""
+	@echo "Gateway:"
+	@echo "  make gateway-deploy   - Deploy shared gateway infrastructure"
+	@echo "  make gateway-status   - Show gateway and HTTPRoute status"
+	@echo "  make gateway-delete   - Delete gateway infrastructure"
 	@echo ""
 	@echo "Datadog:"
 	@echo "  make datadog-deploy   - Deploy Datadog Agent to GKE"
@@ -185,37 +195,60 @@ deploy-burger-mcp: docker-build-burger-mcp
 	@echo "✓ burger-mcp deployed to $(PORT_FORWARD_NAMESPACE)"
 	@echo "Monitor rollout: kubectl rollout status deployment burger-mcp -n $(PORT_FORWARD_NAMESPACE)"
 
-# Kubernetes commands
-k8s-apply:
-	@echo "Applying Kubernetes manifests to dev environment..."
-	kubectl apply -f k8s/manifests/namespace.yaml
-	kubectl apply -f k8s/manifests/ -n mcp-agent-dev
-	@echo "Manifests applied successfully"
+# Kubernetes commands (using Kustomize)
+# ENV variable: dev (default) or prod
+# Usage: make k8s-apply ENV=prod
+ENV ?= dev
+NAMESPACE_PREFIX = mcp-agent-
+K8S_NAMESPACE = $(NAMESPACE_PREFIX)$(ENV)
+
+k8s-apply: secrets-generate
+	@echo "Applying Kubernetes manifests to $(ENV) environment..."
+	kubectl apply -k k8s/overlays/$(ENV)
+	@echo "✓ Manifests applied successfully to $(K8S_NAMESPACE)"
+
+k8s-apply-dev:
+	@echo "Generating secrets for dev environment..."
+	@./k8s/scripts/generate-secrets.sh dev
+	@echo "Deploying to dev environment..."
+	kubectl apply -k k8s/overlays/dev
+	@echo "✓ Deployed to mcp-agent-dev"
+
+k8s-apply-prod:
+	@echo "Generating secrets for prod environment..."
+	@./k8s/scripts/generate-secrets.sh prod
+	@echo "Deploying to prod environment..."
+	kubectl apply -k k8s/overlays/prod
+	@echo "✓ Deployed to mcp-agent-prod"
 
 k8s-delete:
-	@echo "Deleting Kubernetes resources from dev environment..."
-	kubectl delete -f k8s/manifests/ -n mcp-agent-dev --ignore-not-found=true
-	@echo "Resources deleted"
+	@echo "Deleting Kubernetes resources from $(ENV) environment..."
+	kubectl delete -k k8s/overlays/$(ENV) --ignore-not-found=true
+	@echo "Resources deleted from $(K8S_NAMESPACE)"
+
+k8s-diff:
+	@echo "Showing diff for $(ENV) environment..."
+	kubectl diff -k k8s/overlays/$(ENV) || true
 
 deploy: docker-push k8s-apply
 	@echo "Deployment complete!"
 	@echo "Waiting for pods to be ready..."
-	kubectl wait --for=condition=ready pod -l app=mcp-agent -n mcp-agent-dev --timeout=300s || true
+	kubectl wait --for=condition=ready pod -l app=mcp-agent -n $(K8S_NAMESPACE) --timeout=300s || true
 	@make k8s-status
 
 k8s-status:
 	@echo "=========================================="
-	@echo "Kubernetes Status - Dev Environment"
+	@echo "Kubernetes Status - $(ENV) Environment"
 	@echo "=========================================="
 	@echo ""
 	@echo "Pods:"
-	kubectl get pods -n mcp-agent-dev -o wide
+	kubectl get pods -n $(K8S_NAMESPACE) -o wide
 	@echo ""
 	@echo "Services:"
-	kubectl get services -n mcp-agent-dev
+	kubectl get services -n $(K8S_NAMESPACE)
 	@echo ""
 	@echo "Deployments:"
-	kubectl get deployments -n mcp-agent-dev
+	kubectl get deployments -n $(K8S_NAMESPACE)
 
 k8s-logs:
 	@echo "Select a service to tail logs:"
@@ -279,9 +312,9 @@ env-check:
 	fi
 
 secrets-generate:
-	@echo "Generating Kubernetes secrets from .env..."
-	./k8s/scripts/generate-secrets.sh
-	@echo "Secrets generated successfully"
+	@echo "Generating Kubernetes secrets for $(ENV) environment..."
+	./k8s/scripts/generate-secrets.sh $(ENV)
+	@echo "✓ Secrets generated successfully for $(ENV)"
 
 # Port forwarding for local access
 # Usage: make port-forward-agent [ENV=dev|prod]
@@ -342,3 +375,37 @@ datadog-status:
 datadog-logs:
 	@echo "Tailing Datadog Agent logs..."
 	kubectl logs -f -l app=datadog-agent -n datadog --tail=100
+
+# Gateway commands
+gateway-deploy:
+	@echo "Deploying shared gateway infrastructure..."
+	kubectl apply -k k8s/gateway-infra
+	@echo "✓ Gateway infrastructure deployed"
+	@echo ""
+	@echo "Waiting for gateway to be ready..."
+	kubectl wait --for=condition=Programmed gateway/shared-gateway -n shared-infra --timeout=300s || true
+	@echo ""
+	@echo "Gateway status:"
+	kubectl get gateway -n shared-infra
+
+gateway-status:
+	@echo "=========================================="
+	@echo "Gateway Status"
+	@echo "=========================================="
+	@echo ""
+	@echo "Gateway:"
+	kubectl get gateway -n shared-infra
+	@echo ""
+	@echo "HTTPRoutes (dev):"
+	kubectl get httproute -n mcp-agent-dev
+	@echo ""
+	@echo "HTTPRoutes (prod):"
+	kubectl get httproute -n mcp-agent-prod
+	@echo ""
+	@echo "Gateway Details:"
+	kubectl describe gateway shared-gateway -n shared-infra | grep -A 20 "Status:"
+
+gateway-delete:
+	@echo "Deleting gateway infrastructure..."
+	kubectl delete -k k8s/gateway-infra --ignore-not-found=true
+	@echo "Gateway infrastructure deleted"

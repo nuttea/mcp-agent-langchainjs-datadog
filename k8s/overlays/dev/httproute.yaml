@@ -1,0 +1,75 @@
+---
+# HTTPRoute for Dev Environment - Agent Webapp
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: agent-webapp-dev
+  namespace: mcp-agent-dev
+spec:
+  parentRefs:
+  - name: shared-gateway
+    namespace: shared-infra
+    sectionName: http
+  hostnames:
+  - "dev.platform-engineering-demo.dev"
+  rules:
+  - backendRefs:
+    - name: agent-webapp
+      port: 80
+
+---
+# HTTPRoute for Dev Environment - Burger Webapp
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: burger-webapp-dev
+  namespace: mcp-agent-dev
+spec:
+  parentRefs:
+  - name: shared-gateway
+    namespace: shared-infra
+    sectionName: http
+  hostnames:
+  - "burgers-dev.platform-engineering-demo.dev"
+  rules:
+  - backendRefs:
+    - name: burger-webapp
+      port: 80
+
+---
+# HTTPRoute for Dev Environment - Agent API
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: agent-api-dev
+  namespace: mcp-agent-dev
+spec:
+  parentRefs:
+  - name: shared-gateway
+    namespace: shared-infra
+    sectionName: http
+  hostnames:
+  - "agent-api-dev.platform-engineering-demo.dev"
+  rules:
+  - backendRefs:
+    - name: agent-api
+      port: 8080
+
+---
+# HTTPRoute for Dev Environment - Burger API
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: burger-api-dev
+  namespace: mcp-agent-dev
+spec:
+  parentRefs:
+  - name: shared-gateway
+    namespace: shared-infra
+    sectionName: http
+  hostnames:
+  - "burger-api-dev.platform-engineering-demo.dev"
+  rules:
+  - backendRefs:
+    - name: burger-api
+      port: 8080

@@ -1,0 +1,81 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: agent-api-pdb
+  labels:
+    app: mcp-agent
+    service: agent-api
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: mcp-agent
+      service: agent-api
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: burger-api-pdb
+  labels:
+    app: mcp-agent
+    service: burger-api
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: mcp-agent
+      service: burger-api
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: burger-mcp-pdb
+  labels:
+    app: mcp-agent
+    service: burger-mcp
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: mcp-agent
+      service: burger-mcp
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: postgres-pdb
+  labels:
+    app: mcp-agent
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: postgres
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: agent-webapp-pdb
+  labels:
+    app: mcp-agent
+    service: agent-webapp
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: mcp-agent
+      service: agent-webapp
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: burger-webapp-pdb
+  labels:
+    app: mcp-agent
+    service: burger-webapp
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: mcp-agent
+      service: burger-webapp

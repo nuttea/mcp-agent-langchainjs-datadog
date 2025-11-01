@@ -1,0 +1,36 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: mcp-agent-dev
+
+labels:
+  - pairs:
+      environment: dev
+
+commonAnnotations:
+  app.kubernetes.io/managed-by: kustomize
+
+# Include all base resources
+resources:
+  - ../../base
+  - namespace.yaml
+  - secrets.yaml
+  - httproute.yaml
+
+# Use latest tag for dev
+images:
+  - name: gcr.io/datadog-ese-sandbox/agent-api
+    newTag: latest
+  - name: gcr.io/datadog-ese-sandbox/agent-webapp
+    newTag: latest
+  - name: gcr.io/datadog-ese-sandbox/burger-api
+    newTag: latest
+  - name: gcr.io/datadog-ese-sandbox/burger-webapp
+    newTag: latest
+  - name: gcr.io/datadog-ese-sandbox/burger-mcp
+    newTag: latest
+
+# Apply patches for dev-specific configurations
+patches:
+  - path: patches/configmap.yaml
+  - path: patches/hpa.yaml

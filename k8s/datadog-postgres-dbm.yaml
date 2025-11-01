@@ -1,0 +1,84 @@
+---
+# Secret for Datadog PostgreSQL monitoring credentials
+apiVersion: v1
+kind: Secret
+metadata:
+  name: datadog-postgres-credentials
+  namespace: mcp-agent-dev
+type: Opaque
+stringData:
+  username: datadog
+  password: datadog_monitoring_password_change_me
+---
+# ConfigMap for Datadog PostgreSQL check configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: datadog-postgres-config
+  namespace: mcp-agent-dev
+  labels:
+    app: datadog-agent
+data:
+  postgres.yaml: |
+    init_config:
+    instances:
+      - host: postgres-0.postgres.mcp-agent-dev.svc.cluster.local
+        port: 5432
+        username: datadog
+        password: datadog_monitoring_password_change_me
+        dbname: burgerdb
+        # Enable Database Monitoring
+        dbm: true
+        # Collect query metrics
+        query_metrics:
+          enabled: true
+          run_sync: false
+          collection_interval: 10
+        # Collect query samples (explain plans)
+        query_samples:
+          enabled: true
+          run_sync: false
+          collection_interval: 10
+          explain_function: datadog.explain_statement
+          explained_queries_per_hour_per_query: 60
+          samples_per_hour_per_query: 15
+          # Events to track
+          events:
+            - error
+            - warning
+        # Collect execution plans
+        query_activity:
+          enabled: true
+          collection_interval: 10
+        # Additional connection settings
+        ssl: false
+        # Tag the database with service and env
+        tags:
+          - 'env:dev'
+          - 'service:postgres'
+          - 'app:burgers-ai-agent'
+          - 'database:burgerdb'
+        # Collect table and index metrics
+        relations:
+          - relation_regex: '.*'
+        # Collect custom queries
+        custom_queries:
+          - metric_prefix: postgresql
+            query: SELECT schemaname,relname,n_live_tup,n_dead_tup,n_tup_ins,n_tup_upd,n_tup_del FROM pg_stat_user_tables
+            columns:
+              - name: schemaname
+                type: tag
+              - name: relname
+                type: tag
+              - name: live_tuples
+                type: gauge
+              - name: dead_tuples
+                type: gauge
+              - name: tuples_inserted
+                type: monotonic_count
+              - name: tuples_updated
+                type: monotonic_count
+              - name: tuples_deleted
+                type: monotonic_count
+            tags:
+              - 'custom_query:table_stats'

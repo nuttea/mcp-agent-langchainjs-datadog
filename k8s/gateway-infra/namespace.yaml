@@ -1,0 +1,20 @@
+---
+# Shared infrastructure namespace for Gateway
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: shared-infra
+  labels:
+    app: shared-infra
+    purpose: gateway
+
+---
+# Production namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mcp-agent-prod
+  labels:
+    app: mcp-agent
+    environment: prod
+    shared-gateway-access: "true"

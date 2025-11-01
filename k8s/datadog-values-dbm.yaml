@@ -1,0 +1,99 @@
+# Datadog Agent Helm values for enabling Database Monitoring
+# This extends the existing configuration
+
+datadog:
+  # Existing configuration (keep all existing values)
+  apiKeyExistingSecret: datadog-secret
+  site: datadoghq.com
+  clusterName: nuttee-cluster-1
+
+  # Enable secret backend for ENC[] notation
+  secretBackend:
+    command: "/readsecret_multiple_providers.sh"
+    arguments: []
+    timeout: 30
+
+  # APM configuration (existing)
+  apm:
+    instrumentation:
+      enabled: true
+      targets:
+        - name: mcp-agent-apps
+          namespaceSelector:
+            matchNames:
+              - mcp-agent-dev
+              - mcp-agent-prod
+          ddTraceVersions:
+            js: "5"
+          ddTraceConfigs:
+            - name: DD_PROFILING_ENABLED
+              value: auto
+
+  # ASM configuration (existing)
+  asm:
+    threats:
+      enabled: true
+    sca:
+      enabled: true
+    iast:
+      enabled: true
+
+  # Logs configuration (existing)
+  logs:
+    enabled: true
+    containerCollectAll: true
+    containerCollectUsingFiles: true
+    autoMultiLineDetection: true
+
+  # Network monitoring (existing)
+  networkMonitoring:
+    enabled: true
+
+  # Process monitoring (existing)
+  processAgent:
+    processCollection: true
+
+  # Security monitoring (existing)
+  securityAgent:
+    runtime:
+      enabled: true
+    compliance:
+      enabled: true
+
+  # SBOM (existing)
+  sbom:
+    containerImage:
+      enabled: true
+    host:
+      enabled: true
+
+  # Service monitoring (existing)
+  serviceMonitoring:
+    enabled: true
+
+# Cluster Agent configuration
+clusterAgent:
+  enabled: true
+  rbac:
+    create: true
+
+# Cluster Checks Runner for running database checks
+clusterChecksRunner:
+  enabled: true
+  replicas: 2
+  rbac:
+    create: true
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# Provider-specific configuration
+providers:
+  gke:
+    cos: true
+
+registry: gcr.io/datadoghq

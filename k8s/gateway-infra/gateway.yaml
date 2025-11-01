@@ -1,0 +1,38 @@
+---
+# GatewayClass for GKE (this is pre-installed by GKE)
+# No need to create this, just reference it
+# apiVersion: gateway.networking.k8s.io/v1
+# kind: GatewayClass
+# metadata:
+#   name: gke-l7-global-external-managed
+# spec:
+#   controllerName: networking.gke.io/gateway
+
+---
+# Shared Gateway - L7 Global External Application Load Balancer
+# This will be deployed in the shared-infra namespace and shared across tenant namespaces
+# Based on GKE multi-tenant gateway pattern (example 3)
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: shared-gateway
+  namespace: shared-infra
+spec:
+  gatewayClassName: gke-l7-global-external-managed
+  # Use the addresses field to specify static IP (not annotation)
+  # Reference: https://docs.cloud.google.com/kubernetes-engine/docs/how-to/deploying-gateways#gateway_ip_addressing
+  addresses:
+  - type: NamedAddress
+    value: mcp-agent-gateway-ip
+  listeners:
+  - name: http
+    protocol: HTTP
+    port: 80
+    allowedRoutes:
+      namespaces:
+        from: Selector
+        selector:
+          matchLabels:
+            shared-gateway-access: "true"
+      kinds:
+      - kind: HTTPRoute

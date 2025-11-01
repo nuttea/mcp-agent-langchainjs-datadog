@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Gateway Infrastructure
+# This creates the shared-infra namespace and Gateway
+# that is used by both dev and prod environments
+
+resources:
+  - namespace.yaml
+  - gateway.yaml
+
+labels:
+  - pairs:
+      component: gateway-infra
