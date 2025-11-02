@@ -127,7 +127,7 @@ export class PostgresChatMessageHistory extends BaseListChatMessageHistory {
   async getContext(): Promise<any> {
     try {
       const result = await this.pool.query(
-        'SELECT title FROM chats WHERE id = $1 AND user_id = $2',
+        'SELECT title, mcp_session_id FROM chats WHERE id = $1 AND user_id = $2',
         [this.sessionId, this.userId]
       );
 
@@ -135,7 +135,10 @@ export class PostgresChatMessageHistory extends BaseListChatMessageHistory {
         return {};
       }
 
-      return { title: result.rows[0].title };
+      return {
+        title: result.rows[0].title,
+        mcpSessionId: result.rows[0].mcp_session_id
+      };
     } catch (error) {
       console.error('Error fetching chat context from PostgreSQL:', error);
       return {};
@@ -145,10 +148,10 @@ export class PostgresChatMessageHistory extends BaseListChatMessageHistory {
   async setContext(context: any): Promise<void> {
     try {
       await this.pool.query(
-        `INSERT INTO chats (id, user_id, title, messages, created_at, updated_at)
-         VALUES ($1, $2, $3, '[]'::jsonb, NOW(), NOW())
-         ON CONFLICT (id) DO UPDATE SET title = $3, updated_at = NOW()`,
-        [this.sessionId, this.userId, context.title || null]
+        `INSERT INTO chats (id, user_id, title, mcp_session_id, messages, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, '[]'::jsonb, NOW(), NOW())
+         ON CONFLICT (id) DO UPDATE SET title = $3, mcp_session_id = $4, updated_at = NOW()`,
+        [this.sessionId, this.userId, context.title || null, context.mcpSessionId || null]
       );
     } catch (error) {
       console.error('Error setting chat context in PostgreSQL:', error);
