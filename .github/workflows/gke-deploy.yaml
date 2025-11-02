@@ -491,59 +491,115 @@ jobs:
             echo "✅ All canaries passed health check"
             echo ""
 
-            # Phase 4: Update all main deployments in parallel
-            echo "=== Phase 4: Rolling out new version to all main deployments ==="
-            for DEPLOYMENT in ${DEPLOYMENTS}; do
-              DEPLOY_NAME=$(echo ${DEPLOYMENT} | cut -d'/' -f2)
-              echo "Updating ${DEPLOY_NAME} to version ${SOURCE_SHA}..."
-
-              kubectl set image deployment/${DEPLOY_NAME} -n ${NAMESPACE} \
-                ${DEPLOY_NAME}=${GAR_LOCATION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/${DEPLOY_NAME}:${SOURCE_SHA} &
-            done
-
-            # Wait for all image updates
-            wait
-
-            echo ""
-            echo "Waiting for all main deployments to roll out..."
-
-            # Wait for all main deployments to complete rollout (in parallel)
-            for DEPLOYMENT in ${DEPLOYMENTS}; do
-              DEPLOY_NAME=$(echo ${DEPLOYMENT} | cut -d'/' -f2)
-              echo "Waiting for ${DEPLOY_NAME} rollout..."
-              kubectl rollout status deployment/${DEPLOY_NAME} -n ${NAMESPACE} --timeout=5m &
-            done
-
-            # Wait for all rollouts to complete
-            if ! wait; then
-              echo ""
-              echo "❌ One or more main deployments failed to roll out"
-              echo "Canaries are still running for potential rollback"
-              exit 1
-            fi
-
-            echo ""
-            echo "✅ All main deployments rolled out successfully"
-            echo ""
-
-            # Phase 5: Clean up all canary deployments
-            echo "=== Phase 5: Cleaning up canary deployments ==="
-            for DEPLOYMENT in ${DEPLOYMENTS}; do
-              DEPLOY_NAME=$(echo ${DEPLOYMENT} | cut -d'/' -f2)
-              echo "Deleting ${DEPLOY_NAME}-canary..."
-              kubectl delete deployment ${DEPLOY_NAME}-canary -n ${NAMESPACE} --ignore-not-found=true &
-            done
-
-            # Wait for all deletions
-            wait
-
-            echo ""
-            echo "✅ Parallel canary deployment completed successfully for all services"
           else
             # For dev, use standard rolling update
             echo "Using standard rolling update for dev environment"
             kubectl rollout restart deployment -n ${NAMESPACE}
           fi
+
+      - name: Evaluate Datadog Deployment Gate
+        if: steps.should-deploy.outputs.should_deploy == 'true' && matrix.environment == 'prod'
+        id: deployment-gate
+        uses: DataDog/deployment-gate-github-action@v1.0.0
+        env:
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+          DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
+        with:
+          service: agent-api
+          env: prod
+          version: ${{ needs.detect-source-commit.outputs.source_sha }}
+          identifier: canary-20
+
+      - name: Rollback Canaries if Gate Failed
+        if: failure() && steps.should-deploy.outputs.should_deploy == 'true' && matrix.environment == 'prod'
+        run: |
+          ENV=prod
+          NAMESPACE="mcp-agent-${ENV}"
+
+          echo "❌ Datadog Deployment Gate evaluation failed"
+          echo "Rolling back all canary deployments..."
+
+          # Get list of deployments
+          DEPLOYMENTS=$(kubectl get deployments -n ${NAMESPACE} -o name | grep -v canary || true)
+
+          for DEPLOYMENT in ${DEPLOYMENTS}; do
+            DEPLOY_NAME=$(echo ${DEPLOYMENT} | cut -d'/' -f2)
+            echo "Deleting ${DEPLOY_NAME}-canary..."
+            kubectl delete deployment ${DEPLOY_NAME}-canary -n ${NAMESPACE} --ignore-not-found=true
+          done
+
+          echo "❌ Deployment stopped due to Deployment Gate failure"
+          exit 1
+
+      - name: Continue Full Rollout
+        if: steps.should-deploy.outputs.should_deploy == 'true' && matrix.environment == 'prod'
+        run: |
+          ENV=prod
+          NAMESPACE="mcp-agent-${ENV}"
+          SOURCE_SHA="${{ needs.detect-source-commit.outputs.source_sha }}"
+
+          # Get list of deployments
+          DEPLOYMENTS=$(kubectl get deployments -n ${NAMESPACE} -o name | grep -v canary || true)
+
+          echo ""
+          echo "=== Phase 4: Rolling out new version to all main deployments ==="
+          echo "✅ Deployment Gate passed, proceeding with full rollout"
+          echo ""
+
+          for DEPLOYMENT in ${DEPLOYMENTS}; do
+            DEPLOY_NAME=$(echo ${DEPLOYMENT} | cut -d'/' -f2)
+            echo "Updating ${DEPLOY_NAME} to version ${SOURCE_SHA}..."
+
+            kubectl set image deployment/${DEPLOY_NAME} -n ${NAMESPACE} \
+              ${DEPLOY_NAME}=${GAR_LOCATION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/${DEPLOY_NAME}:${SOURCE_SHA} &
+          done
+
+          # Wait for all image updates
+          wait
+
+          echo ""
+          echo "Waiting for all main deployments to roll out..."
+
+          # Wait for all main deployments to complete rollout (in parallel)
+          for DEPLOYMENT in ${DEPLOYMENTS}; do
+            DEPLOY_NAME=$(echo ${DEPLOYMENT} | cut -d'/' -f2)
+            echo "Waiting for ${DEPLOY_NAME} rollout..."
+            kubectl rollout status deployment/${DEPLOY_NAME} -n ${NAMESPACE} --timeout=5m &
+          done
+
+          # Wait for all rollouts to complete
+          if ! wait; then
+            echo ""
+            echo "❌ One or more main deployments failed to roll out"
+            echo "Canaries are still running for potential rollback"
+            exit 1
+          fi
+
+          echo ""
+          echo "✅ All main deployments rolled out successfully"
+          echo ""
+
+      - name: Cleanup Canary Deployments
+        if: success() && steps.should-deploy.outputs.should_deploy == 'true' && matrix.environment == 'prod'
+        run: |
+          ENV=prod
+          NAMESPACE="mcp-agent-${ENV}"
+
+          # Get list of deployments
+          DEPLOYMENTS=$(kubectl get deployments -n ${NAMESPACE} -o name | grep -v canary || true)
+
+          echo "=== Phase 5: Cleaning up canary deployments ==="
+          for DEPLOYMENT in ${DEPLOYMENTS}; do
+            DEPLOY_NAME=$(echo ${DEPLOYMENT} | cut -d'/' -f2)
+            echo "Deleting ${DEPLOY_NAME}-canary..."
+            kubectl delete deployment ${DEPLOY_NAME}-canary -n ${NAMESPACE} --ignore-not-found=true &
+          done
+
+          # Wait for all deletions
+          wait
+
+          echo ""
+          echo "✅ Parallel canary deployment completed successfully for all services"
 
       - name: Verify deployment
         if: steps.should-deploy.outputs.should_deploy == 'true'

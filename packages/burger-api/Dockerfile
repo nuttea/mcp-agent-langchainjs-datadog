@@ -39,6 +39,9 @@ COPY --from=builder /app/packages/burger-api/package*.json ./
 # Copy built application
 COPY --from=builder /app/packages/burger-api/dist ./dist
 
+# Copy data directory with images
+COPY --from=builder /app/packages/burger-api/data ./data
+
 # Copy all node_modules from builder (workspace installs at root level)
 COPY --from=builder /app/node_modules ./node_modules
 
