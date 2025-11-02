@@ -3,6 +3,11 @@ node_modules/
 dist/
 .tmp/
 
+# Test coverage
+coverage/
+*.lcov
+.nyc_output/
+
 # Logs
 logs/
 *.log

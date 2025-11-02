@@ -12,14 +12,74 @@ concurrency:
   group: tests-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  GKE_CLUSTER: ${{ vars.GKE_CLUSTER }}
+  GKE_ZONE: ${{ vars.GKE_ZONE }}
+
 jobs:
   test-burger-api:
     name: Test Burger API
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.WIF_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          install_components: 'gke-gcloud-auth-plugin'
+
+      - name: Configure kubectl
+        run: |
+          gcloud container clusters get-credentials ${{ env.GKE_CLUSTER }} \
+            --zone=${{ env.GKE_ZONE }} \
+            --project=${{ env.GCP_PROJECT_ID }}
+        env:
+          USE_GKE_GCLOUD_AUTH_PLUGIN: 'True'
+
+      - name: Get PostgreSQL credentials from dev namespace
+        id: pg-creds
+        run: |
+          # Get credentials from Kubernetes secret in dev namespace
+          POSTGRES_USER=$(kubectl get secret postgres-secret -n mcp-agent-dev -o jsonpath='{.data.POSTGRES_USER}' | base64 -d)
+          POSTGRES_PASSWORD=$(kubectl get secret postgres-secret -n mcp-agent-dev -o jsonpath='{.data.POSTGRES_PASSWORD}' | base64 -d)
+          POSTGRES_DB=$(kubectl get secret postgres-secret -n mcp-agent-dev -o jsonpath='{.data.POSTGRES_DB}' | base64 -d)
+
+          echo "::add-mask::$POSTGRES_PASSWORD"
+          echo "POSTGRES_USER=$POSTGRES_USER" >> $GITHUB_OUTPUT
+          echo "POSTGRES_PASSWORD=$POSTGRES_PASSWORD" >> $GITHUB_OUTPUT
+          echo "POSTGRES_DB=$POSTGRES_DB" >> $GITHUB_OUTPUT
+
+      - name: Setup port-forward to PostgreSQL
+        run: |
+          # Start port-forward in background
+          kubectl port-forward -n mcp-agent-dev statefulset/postgres 5432:5432 &
+          PORT_FORWARD_PID=$!
+          echo "PORT_FORWARD_PID=$PORT_FORWARD_PID" >> $GITHUB_ENV
+
+          # Wait for port-forward to be ready
+          echo "Waiting for port-forward to be ready..."
+          for i in {1..30}; do
+            if nc -z localhost 5432 2>/dev/null; then
+              echo "✅ Port-forward is ready"
+              exit 0
+            fi
+            echo "Waiting... ($i/30)"
+            sleep 2
+          done
+          echo "❌ Port-forward failed to start"
+          exit 1
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -27,26 +87,27 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
-      - name: Install root dependencies
+      - name: Install dependencies
         run: npm ci
-
-      - name: Install burger-api dependencies
-        run: npm ci --workspace=burger-api
-
-      - name: Build burger-api
-        run: npm run build --workspace=burger-api
 
       - name: Run burger-api tests
         run: npm run test:ci --workspace=burger-api
         continue-on-error: true
         env:
-          # Mock environment variables for tests
+          # Connect to PostgreSQL in GKE dev namespace via port-forward
           POSTGRES_HOST: localhost
           POSTGRES_PORT: 5432
-          POSTGRES_USER: testuser
-          POSTGRES_PASSWORD: testpass
-          POSTGRES_DB: testdb
+          POSTGRES_USER: ${{ steps.pg-creds.outputs.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ steps.pg-creds.outputs.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ steps.pg-creds.outputs.POSTGRES_DB }}
           NODE_ENV: test
+
+      - name: Cleanup port-forward
+        if: always()
+        run: |
+          if [ ! -z "$PORT_FORWARD_PID" ]; then
+            kill $PORT_FORWARD_PID || true
+          fi
 
       - name: Upload burger-api test coverage
         uses: actions/upload-artifact@v4
@@ -59,10 +120,65 @@ jobs:
   test-agent-api:
     name: Test Agent API
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.WIF_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          install_components: 'gke-gcloud-auth-plugin'
+
+      - name: Configure kubectl
+        run: |
+          gcloud container clusters get-credentials ${{ env.GKE_CLUSTER }} \
+            --zone=${{ env.GKE_ZONE }} \
+            --project=${{ env.GCP_PROJECT_ID }}
+        env:
+          USE_GKE_GCLOUD_AUTH_PLUGIN: 'True'
+
+      - name: Get PostgreSQL credentials from dev namespace
+        id: pg-creds
+        run: |
+          # Get credentials from Kubernetes secret in dev namespace
+          POSTGRES_USER=$(kubectl get secret postgres-secret -n mcp-agent-dev -o jsonpath='{.data.POSTGRES_USER}' | base64 -d)
+          POSTGRES_PASSWORD=$(kubectl get secret postgres-secret -n mcp-agent-dev -o jsonpath='{.data.POSTGRES_PASSWORD}' | base64 -d)
+          POSTGRES_DB=$(kubectl get secret postgres-secret -n mcp-agent-dev -o jsonpath='{.data.POSTGRES_DB}' | base64 -d)
+
+          echo "::add-mask::$POSTGRES_PASSWORD"
+          echo "POSTGRES_USER=$POSTGRES_USER" >> $GITHUB_OUTPUT
+          echo "POSTGRES_PASSWORD=$POSTGRES_PASSWORD" >> $GITHUB_OUTPUT
+          echo "POSTGRES_DB=$POSTGRES_DB" >> $GITHUB_OUTPUT
+
+      - name: Setup port-forward to PostgreSQL
+        run: |
+          # Start port-forward in background
+          kubectl port-forward -n mcp-agent-dev statefulset/postgres 5432:5432 &
+          PORT_FORWARD_PID=$!
+          echo "PORT_FORWARD_PID=$PORT_FORWARD_PID" >> $GITHUB_ENV
+
+          # Wait for port-forward to be ready
+          echo "Waiting for port-forward to be ready..."
+          for i in {1..30}; do
+            if nc -z localhost 5432 2>/dev/null; then
+              echo "✅ Port-forward is ready"
+              exit 0
+            fi
+            echo "Waiting... ($i/30)"
+            sleep 2
+          done
+          echo "❌ Port-forward failed to start"
+          exit 1
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -70,28 +186,29 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
-      - name: Install root dependencies
+      - name: Install dependencies
         run: npm ci
-
-      - name: Install agent-api dependencies
-        run: npm ci --workspace=agent-api
-
-      - name: Build agent-api
-        run: npm run build --workspace=agent-api
 
       - name: Run agent-api tests
         run: npm run test:ci --workspace=agent-api
         continue-on-error: true
         env:
-          # Mock environment variables for tests
+          # Connect to PostgreSQL in GKE dev namespace via port-forward
           POSTGRES_HOST: localhost
           POSTGRES_PORT: 5432
-          POSTGRES_USER: testuser
-          POSTGRES_PASSWORD: testpass
-          POSTGRES_DB: testdb
-          OPENAI_API_KEY: sk-test-key-mock
+          POSTGRES_USER: ${{ steps.pg-creds.outputs.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ steps.pg-creds.outputs.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ steps.pg-creds.outputs.POSTGRES_DB }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_MODEL: gpt-4o-mini
           NODE_ENV: test
+
+      - name: Cleanup port-forward
+        if: always()
+        run: |
+          if [ ! -z "$PORT_FORWARD_PID" ]; then
+            kill $PORT_FORWARD_PID || true
+          fi
 
       - name: Upload agent-api test coverage
         uses: actions/upload-artifact@v4
