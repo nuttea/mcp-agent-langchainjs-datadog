@@ -72,6 +72,59 @@ app.get('/api', (_req, res) => {
   res.json({ status: 'up', message: 'Agent API is running' });
 });
 
+// Simulation endpoints for testing Datadog APM
+// These endpoints help test error tracking and latency monitoring in Datadog
+
+// Simulate an error (for testing Datadog APM error tracking)
+app.get('/api/simulate/error', (_req, res) => {
+  logger.error('Simulated error endpoint called - this is intentional for APM testing');
+
+  // Throw an error that will be caught by Datadog APM
+  const error = new Error('Simulated error for Datadog APM testing');
+  (error as any).code = 'SIMULATED_ERROR';
+  (error as any).statusCode = 500;
+
+  // This will show up in Datadog APM as an error on the express.request operation
+  throw error;
+});
+
+// Simulate high latency (for testing Datadog APM latency monitoring)
+app.get('/api/simulate/latency', async (req, res) => {
+  const delay = parseInt(req.query.delay as string) || 2000; // Default 2 seconds
+  const maxDelay = 10000; // Max 10 seconds for safety
+  const actualDelay = Math.min(delay, maxDelay);
+
+  logger.info(`Simulating ${actualDelay}ms latency for APM testing`);
+
+  // Simulate processing time
+  await new Promise(resolve => setTimeout(resolve, actualDelay));
+
+  res.json({
+    status: 'success',
+    message: `Simulated ${actualDelay}ms latency`,
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Combined simulation: both error and latency
+app.get('/api/simulate/slow-error', async (req, res) => {
+  const delay = parseInt(req.query.delay as string) || 1500;
+  const maxDelay = 10000;
+  const actualDelay = Math.min(delay, maxDelay);
+
+  logger.warn(`Simulating ${actualDelay}ms latency followed by error`);
+
+  // Simulate slow processing
+  await new Promise(resolve => setTimeout(resolve, actualDelay));
+
+  // Then throw an error
+  const error = new Error('Simulated slow error for Datadog APM testing');
+  (error as any).code = 'SIMULATED_SLOW_ERROR';
+  (error as any).statusCode = 500;
+
+  throw error;
+});
+
 // Get user info - implements the same logic as me-get Azure Function
 // Supports both Azure Easy Auth and anonymous mode for Kubernetes deployment
 app.get('/api/me', async (req, res) => {
