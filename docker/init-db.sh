@@ -47,6 +47,7 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-E
       id VARCHAR(255) PRIMARY KEY,
       user_id VARCHAR(255) NOT NULL,
       title VARCHAR(500),
+      mcp_session_id VARCHAR(255),
       messages JSONB DEFAULT '[]'::jsonb,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
