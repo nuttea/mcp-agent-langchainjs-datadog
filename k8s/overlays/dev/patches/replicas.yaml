@@ -31,4 +31,4 @@ kind: Deployment
 metadata:
   name: burger-mcp
 spec:
-  replicas: 1
+  replicas: 2

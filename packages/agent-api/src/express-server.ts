@@ -76,7 +76,7 @@ app.get('/api', (_req, res) => {
 // These endpoints help test error tracking and latency monitoring in Datadog
 
 // Simulate an error (for testing Datadog APM error tracking)
-app.get('/api/simulate/error', (_req, res) => {
+app.get('/api/simulate/error', (_req, _res) => {
   logger.error('Simulated error endpoint called - this is intentional for APM testing');
 
   // Throw an error that will be caught by Datadog APM
@@ -107,7 +107,7 @@ app.get('/api/simulate/latency', async (req, res) => {
 });
 
 // Combined simulation: both error and latency
-app.get('/api/simulate/slow-error', async (req, res) => {
+app.get('/api/simulate/slow-error', async (req, _res) => {
   const delay = parseInt(req.query.delay as string) || 1500;
   const maxDelay = 10000;
   const actualDelay = Math.min(delay, maxDelay);
@@ -430,16 +430,21 @@ app.post('/api/chats/stream', async (req, res) => {
 
     // Create transport with mcp-session-id header if we have an existing session
     const transportUrl = new URL(burgerMcpUrl);
-    const transport = new StreamableHTTPClientTransport(transportUrl, {
-      headers: mcpSessionId ? { 'mcp-session-id': mcpSessionId } : {}
-    });
+    const transportOptions: any = {};
+
+    // Pass the session ID if we have one stored
+    if (mcpSessionId) {
+      transportOptions.sessionId = mcpSessionId;
+    }
+
+    const transport = new StreamableHTTPClientTransport(transportUrl, transportOptions);
     await client.connect(transport);
 
     // Store the MCP session ID for future requests (if we have chat history and it's a new session)
     if (chatHistory && !mcpSessionId) {
       // For new sessions, burger-mcp creates the session ID during connection
       // Get the session ID from the transport after successful connection
-      const newMcpSessionId = (transport as any).sessionId;
+      const newMcpSessionId = transport.sessionId;
       if (newMcpSessionId) {
         console.log(`New MCP session created with ID: ${newMcpSessionId}, storing in database`);
         await chatHistory.setContext({ mcpSessionId: newMcpSessionId });
