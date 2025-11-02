@@ -297,7 +297,8 @@ jobs:
             k8s/overlays/${ENV}/patches/version-labels.yaml
 
           # Also update VERSION environment variable value
-          sed -i.bak "s/value: ${ENV}-local/value: ${SHORT_SHA}/g" \
+          # Quote the value to ensure it's treated as a string, not a number
+          sed -i.bak "s/value: ${ENV}-local/value: \"${SHORT_SHA}\"/g" \
             k8s/overlays/${ENV}/patches/version-labels.yaml
 
           echo "Updated version labels:"
