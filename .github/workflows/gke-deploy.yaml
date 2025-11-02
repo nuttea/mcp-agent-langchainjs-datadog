@@ -328,9 +328,17 @@ jobs:
 
               echo "Starting canary deployment for ${DEPLOY_NAME}"
 
-              # Create canary deployment (10% of replicas)
+              # Clean up any existing canary deployment first
+              kubectl delete deployment ${DEPLOY_NAME}-canary -n ${NAMESPACE} --ignore-not-found=true
+
+              # Create canary deployment using a more precise sed replacement
+              # Only replace in metadata.name, metadata.labels, spec.selector, and spec.template.metadata.labels
+              # Do NOT replace in image URLs or other fields
               kubectl get deployment ${DEPLOY_NAME} -n ${NAMESPACE} -o yaml | \
-                sed "s/${DEPLOY_NAME}/${DEPLOY_NAME}-canary/g" | \
+                sed "/metadata:/,/^[^ ]/ s/name: ${DEPLOY_NAME}$/name: ${DEPLOY_NAME}-canary/" | \
+                sed "/labels:/,/^[^ ][^ ]/ s/service: ${DEPLOY_NAME}$/service: ${DEPLOY_NAME}-canary/" | \
+                sed "/matchLabels:/,/^[^ ][^ ]/ s/service: ${DEPLOY_NAME}$/service: ${DEPLOY_NAME}-canary/" | \
+                sed "s|ad.datadoghq.com/${DEPLOY_NAME}|ad.datadoghq.com/${DEPLOY_NAME}-canary|g" | \
                 kubectl apply -f -
 
               # Scale canary to 1 replica
