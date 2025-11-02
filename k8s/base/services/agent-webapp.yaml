@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: agent-webapp
+  labels:
+    app: mcp-agent
+    service: agent-webapp
+    
+spec:
+  selector:
+    app: mcp-agent
+    service: agent-webapp
+    
+  ports:
+  - port: 80
+    targetPort: 80
+    protocol: TCP
+    name: http
+  type: LoadBalancer

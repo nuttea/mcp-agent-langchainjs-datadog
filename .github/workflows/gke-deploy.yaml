@@ -386,8 +386,18 @@ jobs:
           echo "Deploying to ${ENV} environment (namespace: ${NAMESPACE})"
           echo "Using image tag: ${SOURCE_SHA}"
 
-          # Apply base infrastructure (ConfigMaps, Services, etc.)
-          kubectl apply -k k8s/overlays/${ENV}
+          # Phase 1: Apply infrastructure and services (NOT deployments yet)
+          # Build full overlay to temp file, then filter out Deployments and apply
+          # This ensures ConfigMaps, Services, and other infrastructure are ready
+          # before creating canary deployments for testing
+          echo "=== Phase 1: Deploying infrastructure and services (NOT deployments) ==="
+          kubectl kustomize k8s/overlays/${ENV} > /tmp/k8s-manifest.yaml
+
+          # Extract only non-Deployment resources
+          awk '/^---$/{ if (deploy) deploy=0; if (!deploy) print; next }
+               /^kind: Deployment$/{ deploy=1; next }
+               { if (!deploy) print }' /tmp/k8s-manifest.yaml | kubectl apply -f -
+          echo ""
 
           # For production, use canary deployment strategy (parallel for all services)
           if [[ "${ENV}" == "prod" ]]; then
@@ -537,6 +547,17 @@ jobs:
           ENV=prod
           NAMESPACE="mcp-agent-${ENV}"
           SOURCE_SHA="${{ needs.detect-source-commit.outputs.source_sha }}"
+
+          # Phase 3: Apply main deployments (ONLY after Datadog gate passes)
+          # This is the critical fix - we wait until canaries are validated
+          # before updating production deployments
+          echo "=== Phase 3: Applying main deployments (after Datadog gate passed) ==="
+
+          # Extract ONLY Deployment resources from manifest and apply them
+          awk '/^---$/{ deploy=0; next }
+               /^kind: Deployment$/{ deploy=1; print "---" }
+               { if (deploy) print }' /tmp/k8s-manifest.yaml | kubectl apply -f -
+          echo ""
 
           # Get list of deployments
           DEPLOYMENTS=$(kubectl get deployments -n ${NAMESPACE} -o name | grep -v canary || true)

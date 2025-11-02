@@ -1,19 +1,12 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
+# Reference subdirectories
+# This allows phased deployment: infrastructure → services → deployments
 resources:
-  - configmap.yaml
-  - agent-api.yaml
-  - agent-webapp.yaml
-  - burger-api.yaml
-  - burger-webapp.yaml
-  - burger-mcp.yaml
-  - postgres-statefulset.yaml
-  - postgres-init-job.yaml
-  - hpa-agent-api.yaml
-  - hpa-burger-api.yaml
-  - hpa-burger-mcp.yaml
-  - pod-disruption-budgets.yaml
+  - infrastructure
+  - services
+  - deployments
 
 labels:
   - pairs:
