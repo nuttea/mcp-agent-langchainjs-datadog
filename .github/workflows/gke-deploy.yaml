@@ -376,53 +376,53 @@ jobs:
         run: |
           ENV=${{ matrix.environment }}
           NAMESPACE="mcp-agent-${ENV}"
+          SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
+          EXPECTED_VERSION="${SHORT_SHA}"
 
-          echo "Verifying deployments in ${NAMESPACE}..."
+          echo "Verifying deployments in ${NAMESPACE} for version: ${EXPECTED_VERSION}..."
           kubectl get deployments -n ${NAMESPACE}
-          kubectl get pods -n ${NAMESPACE}
-
-          # List of deployments to verify (excluding statefulsets like postgres)
-          DEPLOYMENTS="agent-api agent-webapp burger-api burger-mcp burger-webapp"
+          kubectl get pods -n ${NAMESPACE} -L tags.datadoghq.com/version
 
           echo ""
-          echo "Waiting for rollout to complete (timeout: 600s)..."
-          ROLLOUT_FAILED=false
+          echo "Waiting for rollout of version ${EXPECTED_VERSION} to complete (timeout: 600s)..."
 
-          for deployment in ${DEPLOYMENTS}; do
+          # Use kubectl rollout status with label selector to check only deployments with the new version
+          if ! kubectl rollout status deployment -n ${NAMESPACE} \
+            -l tags.datadoghq.com/version=${EXPECTED_VERSION} \
+            --timeout=600s; then
+
             echo ""
-            echo "Checking rollout status for ${deployment}..."
+            echo "❌ Deployment rollout failed for version ${EXPECTED_VERSION}"
+            echo ""
+            echo "Checking deployment status:"
+            kubectl get deployments -n ${NAMESPACE} -o wide
+            echo ""
+            echo "Checking pod status:"
+            kubectl get pods -n ${NAMESPACE} -o wide -L tags.datadoghq.com/version
+            echo ""
+            echo "Checking for failed pods:"
+            FAILED_PODS=$(kubectl get pods -n ${NAMESPACE} --field-selector=status.phase!=Running,status.phase!=Succeeded -o jsonpath='{.items[*].metadata.name}')
 
-            if ! kubectl rollout status deployment/${deployment} -n ${NAMESPACE} --timeout=600s; then
-              echo "❌ Rollout failed for ${deployment}"
-              ROLLOUT_FAILED=true
-
-              echo ""
-              echo "==== Deployment status for ${deployment} ===="
-              kubectl describe deployment ${deployment} -n ${NAMESPACE}
-
-              echo ""
-              echo "==== Pods for ${deployment} ===="
-              kubectl get pods -n ${NAMESPACE} -l service=${deployment} -o wide
-
-              echo ""
-              echo "==== Logs for ${deployment} ===="
-              kubectl logs -n ${NAMESPACE} -l service=${deployment} --tail=50 || echo "Could not fetch logs"
-            else
-              echo "✅ ${deployment} rolled out successfully"
+            if [[ -n "${FAILED_PODS}" ]]; then
+              echo "Failed pods: ${FAILED_PODS}"
+              for pod in ${FAILED_PODS}; do
+                echo ""
+                echo "==== Logs for ${pod} ===="
+                kubectl logs -n ${NAMESPACE} ${pod} --tail=50 || echo "Could not fetch logs for ${pod}"
+                echo ""
+                echo "==== Events for ${pod} ===="
+                kubectl describe pod -n ${NAMESPACE} ${pod} | grep -A 20 "Events:"
+              done
             fi
-          done
 
-          if [[ "${ROLLOUT_FAILED}" == "true" ]]; then
-            echo ""
-            echo "❌ Some deployments failed to roll out"
-            echo ""
-            echo "Current pod status:"
-            kubectl get pods -n ${NAMESPACE} -o wide
             exit 1
           fi
 
           echo ""
-          echo "✅ All deployments rolled out successfully"
+          echo "✅ All deployments with version ${EXPECTED_VERSION} rolled out successfully"
+          echo ""
+          echo "Final status - pods with version ${EXPECTED_VERSION}:"
+          kubectl get pods -n ${NAMESPACE} -l tags.datadoghq.com/version=${EXPECTED_VERSION} -o wide
 
       - name: Run smoke tests
         if: steps.should-deploy.outputs.should_deploy == 'true'
