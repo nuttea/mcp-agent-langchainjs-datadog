@@ -376,12 +376,19 @@ jobs:
         run: |
           ENV=${{ matrix.environment }}
           NAMESPACE="mcp-agent-${ENV}"
+          SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
+          EXPECTED_VERSION="${SHORT_SHA}"
 
-          echo "Verifying deployments in ${NAMESPACE}..."
+          echo "Verifying deployments in ${NAMESPACE} with version: ${EXPECTED_VERSION}..."
           kubectl get deployments -n ${NAMESPACE}
-          kubectl get pods -n ${NAMESPACE}
+          kubectl get pods -n ${NAMESPACE} -L tags.datadoghq.com/version
 
-          # Check if all deployments are ready
+          # List of deployments to verify (excluding statefulsets like postgres)
+          DEPLOYMENTS="agent-api agent-webapp burger-api burger-mcp burger-webapp"
+
+          # First, wait for all deployments to be available
+          echo ""
+          echo "Step 1: Waiting for all deployments to be available..."
           kubectl wait --for=condition=available --timeout=300s \
             deployment --all -n ${NAMESPACE} || {
             echo "❌ Deployment failed! Checking pod status..."
@@ -405,7 +412,63 @@ jobs:
             exit 1
           }
 
-          echo "✅ All deployments are ready"
+          echo "✅ All deployments are available"
+          echo ""
+
+          # Step 2: Verify that pods are running the correct version
+          echo "Step 2: Verifying all pods are running version ${EXPECTED_VERSION}..."
+          VERIFICATION_FAILED=false
+
+          for deployment in ${DEPLOYMENTS}; do
+            echo ""
+            echo "Checking ${deployment}..."
+
+            # Get all pods for this deployment with their version labels
+            PODS=$(kubectl get pods -n ${NAMESPACE} -l app=mcp-agent,service=${deployment} \
+              -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.metadata.labels.tags\.datadoghq\.com/version}{"\n"}{end}')
+
+            if [[ -z "${PODS}" ]]; then
+              echo "⚠️  No pods found for ${deployment}"
+              continue
+            fi
+
+            echo "Pods for ${deployment}:"
+            echo "${PODS}" | while read pod version; do
+              if [[ -n "${pod}" ]]; then
+                if [[ "${version}" == "${EXPECTED_VERSION}" ]]; then
+                  echo "  ✅ ${pod}: version ${version}"
+                else
+                  echo "  ❌ ${pod}: version ${version} (expected ${EXPECTED_VERSION})"
+                  VERIFICATION_FAILED=true
+                fi
+              fi
+            done
+
+            # Check if any pod for this deployment has wrong version
+            WRONG_VERSION_COUNT=$(kubectl get pods -n ${NAMESPACE} \
+              -l app=mcp-agent,service=${deployment} \
+              -o jsonpath='{range .items[*]}{.metadata.labels.tags\.datadoghq\.com/version}{"\n"}{end}' \
+              | grep -v "^${EXPECTED_VERSION}$" | wc -l | tr -d ' ')
+
+            if [[ "${WRONG_VERSION_COUNT}" -gt 0 ]]; then
+              echo "  ❌ Found ${WRONG_VERSION_COUNT} pod(s) with wrong version for ${deployment}"
+              VERIFICATION_FAILED=true
+            else
+              echo "  ✅ All pods for ${deployment} are running version ${EXPECTED_VERSION}"
+            fi
+          done
+
+          echo ""
+          if [[ "${VERIFICATION_FAILED}" == "true" ]]; then
+            echo "❌ Version verification failed! Some pods are not running the expected version."
+            echo ""
+            echo "Expected version: ${EXPECTED_VERSION}"
+            echo "Current pod versions:"
+            kubectl get pods -n ${NAMESPACE} -L tags.datadoghq.com/version
+            exit 1
+          fi
+
+          echo "✅ All deployments are ready and running version ${EXPECTED_VERSION}"
 
       - name: Run smoke tests
         if: steps.should-deploy.outputs.should_deploy == 'true'
