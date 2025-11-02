@@ -90,7 +90,8 @@ app.get('/api/simulate/error', (_req, _res) => {
 
 // Simulate high latency (for testing Datadog APM latency monitoring)
 app.get('/api/simulate/latency', async (req, res) => {
-  const delay = parseInt(req.query.delay as string) || 2000; // Default 2 seconds
+  const delayQuery = Array.isArray(req.query.delay) ? req.query.delay[0] : req.query.delay;
+  const delay = parseInt(delayQuery as string, 10) || 2000; // Default 2 seconds
   const maxDelay = 10000; // Max 10 seconds for safety
   const actualDelay = Math.min(delay, maxDelay);
 
@@ -108,7 +109,8 @@ app.get('/api/simulate/latency', async (req, res) => {
 
 // Combined simulation: both error and latency
 app.get('/api/simulate/slow-error', async (req, _res) => {
-  const delay = parseInt(req.query.delay as string) || 1500;
+  const delayQuery = Array.isArray(req.query.delay) ? req.query.delay[0] : req.query.delay;
+  const delay = parseInt(delayQuery as string, 10) || 1500;
   const maxDelay = 10000;
   const actualDelay = Math.min(delay, maxDelay);
 
@@ -430,7 +432,7 @@ app.post('/api/chats/stream', async (req, res) => {
 
     // Create transport with mcp-session-id header if we have an existing session
     const transportUrl = new URL(burgerMcpUrl);
-    const transportOptions: any = {};
+    const transportOptions: { sessionId?: string } = {};
 
     // Pass the session ID if we have one stored
     if (mcpSessionId) {
@@ -447,7 +449,8 @@ app.post('/api/chats/stream', async (req, res) => {
       const newMcpSessionId = transport.sessionId;
       if (newMcpSessionId) {
         console.log(`New MCP session created with ID: ${newMcpSessionId}, storing in database`);
-        await chatHistory.setContext({ mcpSessionId: newMcpSessionId });
+        // Merge with existing context to avoid overwriting title
+        await chatHistory.setContext({ ...(await chatHistory.getContext()), mcpSessionId: newMcpSessionId });
       } else {
         console.log('Warning: Could not retrieve MCP session ID from transport');
       }

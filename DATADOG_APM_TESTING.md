@@ -235,13 +235,13 @@ curl https://agent-api-prod.platform-engineering-demo.dev/api/simulate/slow-erro
 2. Generate mixed traffic pattern:
    ```bash
    # Terminal 1: Generate successful requests
-   hey -n 1000 -c 10 -q 5 https://agent-api-dev.platform-engineering-demo.dev/api/simulate/latency?delay=100
+   hey -n 1000 -c 10 -q 5 "https://agent-api-dev.platform-engineering-demo.dev/api/simulate/latency?delay=100"
 
    # Terminal 2: Generate errors
-   hey -n 100 -c 5 -q 2 https://agent-api-dev.platform-engineering-demo.dev/api/simulate/error
+   hey -n 100 -c 5 -q 2 "https://agent-api-dev.platform-engineering-demo.dev/api/simulate/error"
 
    # Terminal 3: Generate slow requests
-   hey -n 50 -c 2 -q 1 https://agent-api-dev.platform-engineering-demo.dev/api/simulate/slow-error?delay=2000
+   hey -n 50 -c 2 -q 1 "https://agent-api-dev.platform-engineering-demo.dev/api/simulate/slow-error?delay=2000"
    ```
 
 3. Monitor in Datadog:
