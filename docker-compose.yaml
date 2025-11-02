@@ -1,0 +1,167 @@
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: mcp-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-burgerapp}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme123}
+      POSTGRES_DB: ${POSTGRES_DB:-burgerdb}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-burgerapp}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - mcp-network
+
+  # Burger API (Backend)
+  burger-api:
+    build:
+      context: .
+      dockerfile: packages/burger-api/Dockerfile
+    container_name: mcp-burger-api
+    environment:
+      PORT: 8080
+      NODE_ENV: ${NODE_ENV:-development}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-burgerapp}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme123}
+      POSTGRES_DB: ${POSTGRES_DB:-burgerdb}
+      # Datadog APM (optional for local dev)
+      DD_ENV: ${DD_ENV:-local}
+      DD_SERVICE: burger-api
+      DD_VERSION: ${DD_VERSION:-dev}
+      DD_LOGS_INJECTION: "true"
+      DD_TRACE_ENABLED: ${DD_TRACE_ENABLED:-false}
+      DD_PROFILING_ENABLED: ${DD_PROFILING_ENABLED:-false}
+      DD_RUNTIME_METRICS_ENABLED: ${DD_RUNTIME_METRICS_ENABLED:-false}
+      DD_API_KEY: ${DD_API_KEY:-}
+      # Performance issue flags (for testing)
+      PERF_ISSUE_DB_QUERY_LOOPS: ${PERF_ISSUE_DB_QUERY_LOOPS:-false}
+      PERF_ISSUE_DB_POOL_EXHAUST: ${PERF_ISSUE_DB_POOL_EXHAUST:-false}
+      PERF_ISSUE_CPU_BLOCKING: ${PERF_ISSUE_CPU_BLOCKING:-false}
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./packages/burger-api/src:/app/packages/burger-api/src:ro
+      - ./packages/burger-api/data:/app/packages/burger-api/data:ro
+    networks:
+      - mcp-network
+    restart: unless-stopped
+
+  # Burger MCP Server
+  burger-mcp:
+    build:
+      context: .
+      dockerfile: packages/burger-mcp/Dockerfile
+    container_name: mcp-burger-mcp
+    environment:
+      PORT: 3000
+      NODE_ENV: ${NODE_ENV:-development}
+      BURGER_API_URL: http://burger-api:8080
+      # Datadog APM (optional)
+      DD_ENV: ${DD_ENV:-local}
+      DD_SERVICE: burger-mcp
+      DD_VERSION: ${DD_VERSION:-dev}
+      DD_LOGS_INJECTION: "true"
+      DD_TRACE_ENABLED: ${DD_TRACE_ENABLED:-false}
+      DD_API_KEY: ${DD_API_KEY:-}
+    ports:
+      - "3000:3000"
+    depends_on:
+      - burger-api
+    volumes:
+      - ./packages/burger-mcp/src:/app/packages/burger-mcp/src:ro
+    networks:
+      - mcp-network
+    restart: unless-stopped
+
+  # Agent API (Backend)
+  agent-api:
+    build:
+      context: .
+      dockerfile: packages/agent-api/Dockerfile
+    container_name: mcp-agent-api
+    environment:
+      PORT: 8080
+      NODE_ENV: ${NODE_ENV:-development}
+      BURGER_MCP_URL: http://burger-mcp:3000/mcp
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-burgerapp}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme123}
+      POSTGRES_DB: ${POSTGRES_DB:-burgerdb}
+      # Datadog APM (optional)
+      DD_ENV: ${DD_ENV:-local}
+      DD_SERVICE: agent-api
+      DD_VERSION: ${DD_VERSION:-dev}
+      DD_LOGS_INJECTION: "true"
+      DD_TRACE_ENABLED: ${DD_TRACE_ENABLED:-false}
+      DD_PROFILING_ENABLED: ${DD_PROFILING_ENABLED:-false}
+      DD_RUNTIME_METRICS_ENABLED: ${DD_RUNTIME_METRICS_ENABLED:-false}
+      DD_LLMOBS_ENABLED: ${DD_LLMOBS_ENABLED:-false}
+      DD_API_KEY: ${DD_API_KEY:-}
+    ports:
+      - "8081:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      burger-mcp:
+        condition: service_started
+    volumes:
+      - ./packages/agent-api/src:/app/packages/agent-api/src:ro
+    networks:
+      - mcp-network
+    restart: unless-stopped
+
+  # Burger Webapp (Frontend)
+  burger-webapp:
+    build:
+      context: .
+      dockerfile: packages/burger-webapp/Dockerfile
+    container_name: mcp-burger-webapp
+    environment:
+      VITE_API_URL: ${VITE_BURGER_API_URL:-http://localhost:8080}
+    ports:
+      - "5173:80"
+    depends_on:
+      - burger-api
+    networks:
+      - mcp-network
+    restart: unless-stopped
+
+  # Agent Webapp (Frontend)
+  agent-webapp:
+    build:
+      context: .
+      dockerfile: packages/agent-webapp/Dockerfile
+    container_name: mcp-agent-webapp
+    environment:
+      VITE_API_URL: ${VITE_AGENT_API_URL:-http://localhost:8081}
+    ports:
+      - "4280:80"
+    depends_on:
+      - agent-api
+    networks:
+      - mcp-network
+    restart: unless-stopped
+
+networks:
+  mcp-network:
+    driver: bridge
+
+volumes:
+  postgres-data:
+    driver: local
