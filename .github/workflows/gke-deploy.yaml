@@ -368,6 +368,11 @@ jobs:
                 gcr.io/${{ env.GCP_PROJECT_ID }}/burger-mcp=${IMAGE_BASE}/burger-mcp:${STABLE_TAG_burger_mcp} \
                 gcr.io/${{ env.GCP_PROJECT_ID }}/burger-webapp=${IMAGE_BASE}/burger-webapp:${STABLE_TAG_burger_webapp}
 
+              # Update version labels to match stable tag (use agent-api as reference)
+              echo "✓ Updating version labels to stable tag: ${STABLE_TAG_agent_api}"
+              sed -i.bak "s/version: prod-local/version: ${STABLE_TAG_agent_api}/g" patches/version-labels.yaml
+              sed -i.bak "s/value: prod-local/value: \"${STABLE_TAG_agent_api}\"/g" patches/version-labels.yaml
+
               echo "✓ Overlay updated to use stable tags for Phase 1 apply"
             else
               echo "⚠ No existing deployments found - first deployment"
@@ -380,6 +385,11 @@ jobs:
                 gcr.io/${{ env.GCP_PROJECT_ID }}/burger-api=${IMAGE_BASE}/burger-api:${SOURCE_SHA} \
                 gcr.io/${{ env.GCP_PROJECT_ID }}/burger-mcp=${IMAGE_BASE}/burger-mcp:${SOURCE_SHA} \
                 gcr.io/${{ env.GCP_PROJECT_ID }}/burger-webapp=${IMAGE_BASE}/burger-webapp:${SOURCE_SHA}
+
+              # Update version labels to SOURCE_SHA for first deployment
+              echo "✓ Updating version labels to SOURCE_SHA: ${SOURCE_SHA}"
+              sed -i.bak "s/version: prod-local/version: ${SOURCE_SHA}/g" patches/version-labels.yaml
+              sed -i.bak "s/value: prod-local/value: \"${SOURCE_SHA}\"/g" patches/version-labels.yaml
             fi
           fi
 
