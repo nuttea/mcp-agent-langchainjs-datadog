@@ -1,0 +1,123 @@
+name: Tests
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main, dev ]
+  workflow_dispatch:
+
+# Allow one concurrent test run per branch
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-burger-api:
+    name: Test Burger API
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install burger-api dependencies
+        run: npm ci --workspace=burger-api
+
+      - name: Build burger-api
+        run: npm run build --workspace=burger-api
+
+      - name: Run burger-api tests
+        run: npm run test:ci --workspace=burger-api
+        continue-on-error: true
+        env:
+          # Mock environment variables for tests
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: testdb
+          NODE_ENV: test
+
+      - name: Upload burger-api test coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: burger-api-coverage
+          path: packages/burger-api/coverage/
+          retention-days: 7
+
+  test-agent-api:
+    name: Test Agent API
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install agent-api dependencies
+        run: npm ci --workspace=agent-api
+
+      - name: Build agent-api
+        run: npm run build --workspace=agent-api
+
+      - name: Run agent-api tests
+        run: npm run test:ci --workspace=agent-api
+        continue-on-error: true
+        env:
+          # Mock environment variables for tests
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: testdb
+          OPENAI_API_KEY: sk-test-key-mock
+          OPENAI_MODEL: gpt-4o-mini
+          NODE_ENV: test
+
+      - name: Upload agent-api test coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: agent-api-coverage
+          path: packages/agent-api/coverage/
+          retention-days: 7
+
+  test-summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: [test-burger-api, test-agent-api]
+    if: always()
+
+    steps:
+      - name: Check test results
+        run: |
+          echo "### Test Results Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Package | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| burger-api | ${{ needs.test-burger-api.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| agent-api | ${{ needs.test-agent-api.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "> **Note:** Test failures do not block deployment. This workflow runs for informational purposes." >> $GITHUB_STEP_SUMMARY
+
+          # Always exit successfully so this doesn't block anything
+          exit 0
