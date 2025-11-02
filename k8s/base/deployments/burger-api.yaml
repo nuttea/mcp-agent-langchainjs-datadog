@@ -1,29 +1,34 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: agent-api
+  name: burger-api
   labels:
-    tags.datadoghq.com/service: "agent-api"
+    tags.datadoghq.com/env: "dev"
+    tags.datadoghq.com/service: "burger-api"
     tags.datadoghq.com/version: "1.0.0"
     app: mcp-agent
-    service: agent-api
+    service: burger-api
     component: backend-api
+    
 spec:
   replicas: 1
   selector:
     matchLabels:
       app: mcp-agent
-      service: agent-api
+      service: burger-api
+      
   template:
     metadata:
       labels:
-        tags.datadoghq.com/service: "agent-api"
+        tags.datadoghq.com/env: "dev"
+        tags.datadoghq.com/service: "burger-api"
         tags.datadoghq.com/version: "1.0.0"
         app: mcp-agent
-        service: agent-api
+        service: burger-api
         component: backend-api
+        
       annotations:
-        ad.datadoghq.com/agent-api.logs: '[{"source": "nodejs", "service": "agent-api", "log_processing_rules": [{"type": "multi_line", "name": "log_start_with_date", "pattern": "\\d{4}-(0?[1-9]|1[012])-(0?[1-9]|[12][0-9]|3[01])"}]}]'
+        ad.datadoghq.com/burger-api.logs: '[{"source": "nodejs", "service": "burger-api", "log_processing_rules": [{"type": "multi_line", "name": "log_start_with_date", "pattern": "\\d{4}-(0?[1-9]|1[012])-(0?[1-9]|[12][0-9]|3[01])"}]}]'
     spec:
       # Pod-level security context
       securityContext:
@@ -33,8 +38,8 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       containers:
-      - name: agent-api
-        image: gcr.io/datadog-ese-sandbox/agent-api:latest
+      - name: burger-api
+        image: gcr.io/datadog-ese-sandbox/burger-api:latest
         imagePullPolicy: Always
         # Container-level security context
         securityContext:
@@ -50,8 +55,8 @@ spec:
         envFrom:
         - configMapRef:
             name: app-config
-        - secretRef:
-            name: app-secrets
+        - configMapRef:
+            name: burger-api-perf-flags
         env:
         - name: DD_ENV
           valueFrom:
@@ -75,20 +80,6 @@ spec:
           value: "8080"
         - name: NODE_ENV
           value: "production"
-        - name: BURGER_MCP_URL
-          value: "http://burger-mcp:3000/mcp"
-        - name: OPENAI_API_KEY
-          valueFrom:
-            secretKeyRef:
-              name: app-secrets
-              key: openai-api-key
-        - name: OPENAI_MODEL
-          value: "gpt-4o-mini"
-        - name: DD_API_KEY
-          valueFrom:
-            secretKeyRef:
-              name: app-secrets
-              key: datadog-api-key
         - name: POSTGRES_PASSWORD
           valueFrom:
             secretKeyRef:
@@ -119,21 +110,3 @@ spec:
             port: 8080
           failureThreshold: 30
           periodSeconds: 10
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: agent-api
-  labels:
-    app: mcp-agent
-    service: agent-api
-spec:
-  selector:
-    app: mcp-agent
-    service: agent-api
-  ports:
-  - port: 8080
-    targetPort: 8080
-    protocol: TCP
-    name: http
-  type: ClusterIP

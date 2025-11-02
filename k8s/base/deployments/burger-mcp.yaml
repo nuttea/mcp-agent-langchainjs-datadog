@@ -101,30 +101,3 @@ spec:
             port: 3000
           failureThreshold: 30
           periodSeconds: 10
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: burger-mcp
-  labels:
-    app: mcp-agent
-    service: burger-mcp
-    
-spec:
-  selector:
-    app: mcp-agent
-    service: burger-mcp
-
-  ports:
-  - port: 3000
-    targetPort: 3000
-    protocol: TCP
-    name: http
-  type: ClusterIP
-
-  # Session affinity to ensure MCP sessions stick to the same pod
-  # This is required because burger-mcp stores transport state in memory
-  sessionAffinity: ClientIP
-  sessionAffinityConfig:
-    clientIP:
-      timeoutSeconds: 10800  # 3 hours
