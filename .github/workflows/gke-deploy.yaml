@@ -448,23 +448,22 @@ jobs:
               # Clean up any existing canary deployment first
               kubectl delete deployment ${DEPLOY_NAME}-canary -n ${NAMESPACE} --ignore-not-found=true
 
-              # Create canary deployment using precise sed replacement
-              # Only replace deployment name and service label (NOT Datadog service tags)
+              # Create canary deployment with all modifications in one pass
+              # 1. Replace deployment name and service labels
+              # 2. Update container image to SOURCE_SHA
+              # 3. Update DD_VERSION and VERSION env vars to SOURCE_SHA
+              # 4. Update version label to SOURCE_SHA
               # Preserves tags.datadoghq.com/service to keep same service name in Datadog
               kubectl get deployment ${DEPLOY_NAME} -n ${NAMESPACE} -o yaml | \
                 sed "/metadata:/,/^[^ ]/ s/name: ${DEPLOY_NAME}$/name: ${DEPLOY_NAME}-canary/" | \
                 sed "s/^    service: ${DEPLOY_NAME}$/    service: ${DEPLOY_NAME}-canary/" | \
                 sed "s/^      service: ${DEPLOY_NAME}$/      service: ${DEPLOY_NAME}-canary/" | \
                 sed "s/^        service: ${DEPLOY_NAME}$/        service: ${DEPLOY_NAME}-canary/" | \
+                sed "s|image: .*/\(${DEPLOY_NAME}\):.*|image: ${GAR_LOCATION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/\1:${SOURCE_SHA}|g" | \
+                sed "/name: DD_VERSION$/,/value:/ s/value: .*/value: \"${SOURCE_SHA}\"/" | \
+                sed "/name: VERSION$/,/value:/ s/value: .*/value: \"${SOURCE_SHA}\"/" | \
+                sed "s/tags.datadoghq.com\/version: .*/tags.datadoghq.com\/version: \"${SOURCE_SHA}\"/" | \
                 kubectl apply -f -
-
-              # Update canary image to new SOURCE_SHA version for testing
-              kubectl set image deployment/${DEPLOY_NAME}-canary -n ${NAMESPACE} \
-                ${DEPLOY_NAME}=${GAR_LOCATION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/${DEPLOY_NAME}:${SOURCE_SHA}
-
-              # Update canary Datadog VERSION labels to SOURCE_SHA
-              kubectl set env deployment/${DEPLOY_NAME}-canary -n ${NAMESPACE} DD_VERSION=${SOURCE_SHA} VERSION=${SOURCE_SHA}
-              kubectl patch deployment ${DEPLOY_NAME}-canary -n ${NAMESPACE} --type='json' -p="[{\"op\": \"replace\", \"path\": \"/spec/template/metadata/labels/tags.datadoghq.com~1version\", \"value\": \"${SOURCE_SHA}\"}]"
 
               # Scale canary to 1 replica
               kubectl scale deployment ${DEPLOY_NAME}-canary -n ${NAMESPACE} --replicas=1 &
