@@ -334,41 +334,70 @@ jobs:
           elif [[ "${ENV}" == "prod" ]]; then
             if [[ "${IS_MERGE}" == "true" ]]; then
               echo "✓ Prod deployment - PR merge detected"
-              echo "✓ Using source commit SHA: ${SOURCE_SHA} (reusing existing images)"
+              echo "✓ New version will be: ${SOURCE_SHA} (reusing existing images)"
             else
               echo "✓ Prod deployment - direct commit"
-              echo "✓ Using commit SHA: ${SOURCE_SHA}"
+              echo "✓ New version will be: ${SOURCE_SHA}"
             fi
 
-            # Update to use source commit hash for immutable deployments
-            kustomize edit set image \
-              gcr.io/${{ env.GCP_PROJECT_ID }}/agent-api=${IMAGE_BASE}/agent-api:${SOURCE_SHA} \
-              gcr.io/${{ env.GCP_PROJECT_ID }}/agent-webapp=${IMAGE_BASE}/agent-webapp:${SOURCE_SHA} \
-              gcr.io/${{ env.GCP_PROJECT_ID }}/burger-api=${IMAGE_BASE}/burger-api:${SOURCE_SHA} \
-              gcr.io/${{ env.GCP_PROJECT_ID }}/burger-mcp=${IMAGE_BASE}/burger-mcp:${SOURCE_SHA} \
-              gcr.io/${{ env.GCP_PROJECT_ID }}/burger-webapp=${IMAGE_BASE}/burger-webapp:${SOURCE_SHA}
+            # For prod: Get current stable tags from running deployments
+            # Apply with stable tags first, test canaries, then upgrade to SOURCE_SHA in Phase 5
+            echo "✓ Getting current stable tags from production deployments..."
+
+            NAMESPACE="mcp-agent-prod"
+            DEPLOYMENTS=$(kubectl get deployments -n ${NAMESPACE} -o name 2>/dev/null | grep -v canary || true)
+
+            if [[ -n "${DEPLOYMENTS}" ]]; then
+              # Get stable tags from running deployments
+              for DEPLOYMENT in ${DEPLOYMENTS}; do
+                DEPLOY_NAME=$(echo ${DEPLOYMENT} | cut -d'/' -f2)
+                CURRENT_IMAGE=$(kubectl get deployment ${DEPLOY_NAME} -n ${NAMESPACE} -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || echo "")
+
+                if [[ -n "${CURRENT_IMAGE}" ]]; then
+                  STABLE_TAG=$(echo ${CURRENT_IMAGE} | awk -F':' '{print $NF}')
+                  echo "  ${DEPLOY_NAME}: ${STABLE_TAG}"
+                  eval "STABLE_TAG_${DEPLOY_NAME//-/_}=${STABLE_TAG}"
+                fi
+              done
+
+              # Set overlay to use current stable tags
+              kustomize edit set image \
+                gcr.io/${{ env.GCP_PROJECT_ID }}/agent-api=${IMAGE_BASE}/agent-api:${STABLE_TAG_agent_api} \
+                gcr.io/${{ env.GCP_PROJECT_ID }}/agent-webapp=${IMAGE_BASE}/agent-webapp:${STABLE_TAG_agent_webapp} \
+                gcr.io/${{ env.GCP_PROJECT_ID }}/burger-api=${IMAGE_BASE}/burger-api:${STABLE_TAG_burger_api} \
+                gcr.io/${{ env.GCP_PROJECT_ID }}/burger-mcp=${IMAGE_BASE}/burger-mcp:${STABLE_TAG_burger_mcp} \
+                gcr.io/${{ env.GCP_PROJECT_ID }}/burger-webapp=${IMAGE_BASE}/burger-webapp:${STABLE_TAG_burger_webapp}
+
+              echo "✓ Overlay updated to use stable tags for Phase 1 apply"
+            else
+              echo "⚠ No existing deployments found - first deployment"
+              echo "✓ Will use SOURCE_SHA: ${SOURCE_SHA}"
+
+              # First deployment - use SOURCE_SHA directly
+              kustomize edit set image \
+                gcr.io/${{ env.GCP_PROJECT_ID }}/agent-api=${IMAGE_BASE}/agent-api:${SOURCE_SHA} \
+                gcr.io/${{ env.GCP_PROJECT_ID }}/agent-webapp=${IMAGE_BASE}/agent-webapp:${SOURCE_SHA} \
+                gcr.io/${{ env.GCP_PROJECT_ID }}/burger-api=${IMAGE_BASE}/burger-api:${SOURCE_SHA} \
+                gcr.io/${{ env.GCP_PROJECT_ID }}/burger-mcp=${IMAGE_BASE}/burger-mcp:${SOURCE_SHA} \
+                gcr.io/${{ env.GCP_PROJECT_ID }}/burger-webapp=${IMAGE_BASE}/burger-webapp:${SOURCE_SHA}
+            fi
           fi
 
-      - name: Update Datadog UST version labels
-        if: steps.should-deploy.outputs.should_deploy == 'true'
+      - name: Update Datadog UST version labels (Dev only)
+        if: steps.should-deploy.outputs.should_deploy == 'true' && matrix.environment == 'dev'
         run: |
-          # Use source commit SHA for version tracking (matches image tags)
-          # For main branch: source_sha = current commit (not a merge)
-          # For prod branch: source_sha = PR source commit (reusing images)
+          # Dev: Update version labels immediately (deploys directly with new version)
+          # Prod: Skip here - will update in Phase 5 after gate passes
           SOURCE_SHA="${{ needs.detect-source-commit.outputs.source_sha }}"
           ENV=${{ matrix.environment }}
 
-          # Always use source commit SHA for VERSION tracking
-          # This enables correlating Datadog traces/logs/metrics to exact code version
           echo "✓ Setting VERSION to source commit SHA: ${SOURCE_SHA}"
 
           # Update version-labels.yaml patch with source commit SHA
-          # Replace the default version placeholder with actual commit SHA
           sed -i.bak "s/version: ${ENV}-local/version: ${SOURCE_SHA}/g" \
             k8s/overlays/${ENV}/patches/version-labels.yaml
 
           # Also update VERSION environment variable value
-          # Quote the value to ensure it's treated as a string, not a number
           sed -i.bak "s/value: ${ENV}-local/value: \"${SOURCE_SHA}\"/g" \
             k8s/overlays/${ENV}/patches/version-labels.yaml
 
@@ -384,18 +413,13 @@ jobs:
           SOURCE_SHA="${{ needs.detect-source-commit.outputs.source_sha }}"
 
           echo "Deploying to ${ENV} environment (namespace: ${NAMESPACE})"
-          echo "Using image tag: ${SOURCE_SHA}"
+          echo "New version for canaries: ${SOURCE_SHA}"
 
-          # Phase 1: Apply infrastructure and services (NOT deployments yet)
-          # Build full overlay to temp file, then filter out Deployments and apply
-          # This ensures ConfigMaps, Services, and other infrastructure are ready
-          # before creating canary deployments for testing
-          echo "=== Phase 1: Deploying infrastructure and services (NOT deployments) ==="
-          kubectl kustomize k8s/overlays/${ENV} > /tmp/k8s-manifest.yaml
-
-          # Extract only non-Deployment resources (filter out all Deployment kind resources)
-          awk '/^---$/{if(deploy)deploy=0;if(!deploy)print;next}/^kind: Deployment$/{deploy=1;next}{if(!deploy)print}' \
-            /tmp/k8s-manifest.yaml | kubectl apply -f -
+          # Phase 1: Apply all resources
+          # For prod: Uses stable tags (set in "Update Image Tags" step)
+          # For dev: Uses :latest tags
+          echo "=== Phase 1: Applying all resources ==="
+          kubectl apply -k k8s/overlays/${ENV}
           echo ""
 
           # For production, use canary deployment strategy (parallel for all services)
@@ -415,8 +439,8 @@ jobs:
             echo "${DEPLOYMENTS}"
             echo ""
 
-            # Phase 1: Create all canary deployments in parallel
-            echo "=== Phase 1: Creating all canary deployments ==="
+            # Phase 2: Create all canary deployments in parallel
+            echo "=== Phase 2: Creating all canary deployments ==="
             for DEPLOYMENT in ${DEPLOYMENTS}; do
               DEPLOY_NAME=$(echo ${DEPLOYMENT} | cut -d'/' -f2)
               echo "Creating canary for ${DEPLOY_NAME}..."
@@ -434,6 +458,14 @@ jobs:
                 sed "s/^        service: ${DEPLOY_NAME}$/        service: ${DEPLOY_NAME}-canary/" | \
                 kubectl apply -f -
 
+              # Update canary image to new SOURCE_SHA version for testing
+              kubectl set image deployment/${DEPLOY_NAME}-canary -n ${NAMESPACE} \
+                ${DEPLOY_NAME}=${GAR_LOCATION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/${DEPLOY_NAME}:${SOURCE_SHA}
+
+              # Update canary Datadog VERSION labels to SOURCE_SHA
+              kubectl set env deployment/${DEPLOY_NAME}-canary -n ${NAMESPACE} DD_VERSION=${SOURCE_SHA} VERSION=${SOURCE_SHA}
+              kubectl patch deployment ${DEPLOY_NAME}-canary -n ${NAMESPACE} --type='json' -p="[{\"op\": \"replace\", \"path\": \"/spec/template/metadata/labels/tags.datadoghq.com~1version\", \"value\": \"${SOURCE_SHA}\"}]"
+
               # Scale canary to 1 replica
               kubectl scale deployment ${DEPLOY_NAME}-canary -n ${NAMESPACE} --replicas=1 &
             done
@@ -442,7 +474,7 @@ jobs:
             wait
 
             echo ""
-            echo "=== Phase 2: Waiting for all canaries to become ready ==="
+            echo "=== Phase 3: Waiting for all canaries to become ready ==="
             # Wait for all canaries to be ready (in parallel)
             for DEPLOYMENT in ${DEPLOYMENTS}; do
               DEPLOY_NAME=$(echo ${DEPLOYMENT} | cut -d'/' -f2)
@@ -466,8 +498,8 @@ jobs:
             echo "✅ All canaries are ready"
             echo ""
 
-            # Phase 3: Health check - monitor for 30 seconds
-            echo "=== Phase 3: Monitoring canary health for 30 seconds ==="
+            # Phase 4: Health check - monitor for 30 seconds
+            echo "=== Phase 4: Monitoring canary health for 30 seconds ==="
             sleep 30
 
             # Check if all canary pods are still healthy
@@ -547,34 +579,35 @@ jobs:
           NAMESPACE="mcp-agent-${ENV}"
           SOURCE_SHA="${{ needs.detect-source-commit.outputs.source_sha }}"
 
-          # Phase 3: Apply main deployments (ONLY after Datadog gate passes)
-          # This is the critical fix - we wait until canaries are validated
-          # before updating production deployments
-          echo "=== Phase 3: Applying main deployments (after Datadog gate passed) ==="
+          echo ""
+          echo "=== Phase 5: Rolling out new version to all main deployments ==="
+          echo "✅ Deployment Gate passed, proceeding with full rollout"
+          echo "Updating overlay to use new SOURCE_SHA tags and reapplying"
+          echo ""
 
-          # Extract ONLY Deployment resources from manifest and apply them
-          awk '/^---$/{deploy=0;next}/^kind: Deployment$/{deploy=1;print "---"}{if(deploy)print}' \
-            /tmp/k8s-manifest.yaml | kubectl apply -f -
+          # Update kustomize overlay to SOURCE_SHA tags
+          cd k8s/overlays/${ENV}
+          kustomize edit set image \
+            gcr.io/${{ env.GCP_PROJECT_ID }}/agent-api=${GAR_LOCATION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/agent-api:${SOURCE_SHA} \
+            gcr.io/${{ env.GCP_PROJECT_ID }}/agent-webapp=${GAR_LOCATION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/agent-webapp:${SOURCE_SHA} \
+            gcr.io/${{ env.GCP_PROJECT_ID }}/burger-api=${GAR_LOCATION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/burger-api:${SOURCE_SHA} \
+            gcr.io/${{ env.GCP_PROJECT_ID }}/burger-mcp=${GAR_LOCATION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/burger-mcp:${SOURCE_SHA} \
+            gcr.io/${{ env.GCP_PROJECT_ID }}/burger-webapp=${GAR_LOCATION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/burger-webapp:${SOURCE_SHA}
+
+          # Update Datadog version labels to SOURCE_SHA
+          echo "✓ Updating Datadog UST version labels to ${SOURCE_SHA}"
+          sed -i.bak "s/version: prod-local/version: ${SOURCE_SHA}/g" patches/version-labels.yaml
+          sed -i.bak "s/value: prod-local/value: \"${SOURCE_SHA}\"/g" patches/version-labels.yaml
+
+          cd ../../..
+
+          # Apply kustomize with new SOURCE_SHA tags and version labels
+          echo "Applying full kustomize with new version..."
+          kubectl apply -k k8s/overlays/${ENV}
           echo ""
 
           # Get list of deployments
           DEPLOYMENTS=$(kubectl get deployments -n ${NAMESPACE} -o name | grep -v canary || true)
-
-          echo ""
-          echo "=== Phase 4: Rolling out new version to all main deployments ==="
-          echo "✅ Deployment Gate passed, proceeding with full rollout"
-          echo ""
-
-          for DEPLOYMENT in ${DEPLOYMENTS}; do
-            DEPLOY_NAME=$(echo ${DEPLOYMENT} | cut -d'/' -f2)
-            echo "Updating ${DEPLOY_NAME} to version ${SOURCE_SHA}..."
-
-            kubectl set image deployment/${DEPLOY_NAME} -n ${NAMESPACE} \
-              ${DEPLOY_NAME}=${GAR_LOCATION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/${DEPLOY_NAME}:${SOURCE_SHA} &
-          done
-
-          # Wait for all image updates
-          wait
 
           echo ""
           echo "Waiting for all main deployments to roll out..."
@@ -607,7 +640,7 @@ jobs:
           # Get list of deployments
           DEPLOYMENTS=$(kubectl get deployments -n ${NAMESPACE} -o name | grep -v canary || true)
 
-          echo "=== Phase 5: Cleaning up canary deployments ==="
+          echo "=== Phase 6: Cleaning up canary deployments ==="
           for DEPLOYMENT in ${DEPLOYMENTS}; do
             DEPLOY_NAME=$(echo ${DEPLOYMENT} | cut -d'/' -f2)
             echo "Deleting ${DEPLOY_NAME}-canary..."
