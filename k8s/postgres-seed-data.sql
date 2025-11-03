@@ -23,12 +23,12 @@ ALTER TABLE toppings ADD COLUMN IF NOT EXISTS image VARCHAR(500);
 
 -- Insert all 22 toppings
 INSERT INTO toppings (id, name, category, price, image) VALUES
-('1', 'Iceberg Lettuce', 'vegetables', 0.50, 'topping-pic-1.jpg'),
-('2', 'Tomato Slices', 'vegetables', 0.70, 'topping-pic-2.jpg'),
-('3', 'Red Onion', 'vegetables', 0.40, 'topping-pic-3.jpg'),
-('4', 'Pickles', 'vegetables', 0.40, 'topping-pic-4.jpg'),
-('5', 'Grilled Mushrooms', 'vegetables', 0.80, 'topping-pic-5.jpg'),
-('6', 'Jalapeños', 'vegetables', 0.50, 'topping-pic-6.jpg'),
+('1', 'Iceberg Lettuce', 'vegetable', 0.50, 'topping-pic-1.jpg'),
+('2', 'Tomato Slices', 'vegetable', 0.70, 'topping-pic-2.jpg'),
+('3', 'Red Onion', 'vegetable', 0.40, 'topping-pic-3.jpg'),
+('4', 'Pickles', 'vegetable', 0.40, 'topping-pic-4.jpg'),
+('5', 'Grilled Mushrooms', 'vegetable', 0.80, 'topping-pic-5.jpg'),
+('6', 'Jalapeños', 'vegetable', 0.50, 'topping-pic-6.jpg'),
 ('7', 'Bacon', 'meat', 1.20, 'topping-pic-7.jpg'),
 ('8', 'Beef Patty', 'meat', 2.50, 'topping-pic-8.jpg'),
 ('9', 'Chicken Breast', 'meat', 2.30, 'topping-pic-9.jpg'),
