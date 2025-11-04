@@ -1,0 +1,12 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: postgres-init
+spec:
+  template:
+    spec:
+      containers:
+      - name: init-db
+        env:
+        - name: PGHOST
+          value: postgres-0.postgres.mcp-agent-prod.svc.cluster.local

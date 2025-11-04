@@ -26,7 +26,7 @@ data:
   LOG_LEVEL: "info"
 
   # PostgreSQL Configuration
-  POSTGRES_HOST: "postgres-0.postgres.mcp-agent-dev.svc.cluster.local"
+  # POSTGRES_HOST is set in overlay patches per environment
   POSTGRES_PORT: "5432"
   POSTGRES_USER: "burgerapp"
   POSTGRES_DB: "burgerdb"
