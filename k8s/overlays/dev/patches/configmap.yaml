@@ -6,3 +6,5 @@ data:
   # Override PUBLIC_BASE_URL for dev environment
   PUBLIC_BASE_URL: "https://burger-api-dev.platform-engineering-demo.dev"
   DD_ENV: "dev"
+  # PostgreSQL host for dev environment
+  POSTGRES_HOST: "postgres-0.postgres.mcp-agent-dev.svc.cluster.local"

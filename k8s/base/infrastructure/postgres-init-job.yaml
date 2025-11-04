@@ -30,7 +30,8 @@ spec:
           runAsUser: 999
         env:
         - name: PGHOST
-          value: postgres-0.postgres.mcp-agent-dev.svc.cluster.local
+          # This value will be patched per environment in overlay patches
+          value: postgres-0.postgres
         - name: PGPORT
           value: "5432"
         - name: PGUSER
