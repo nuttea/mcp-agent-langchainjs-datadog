@@ -414,6 +414,28 @@ jobs:
           echo "Updated version labels:"
           grep -E "version:|value:" k8s/overlays/${ENV}/patches/version-labels.yaml | head -10
 
+      - name: Inject Git Info for Datadog Source Code Integration
+        if: steps.should-deploy.outputs.should_deploy == 'true'
+        run: |
+          ENV=${{ matrix.environment }}
+          SOURCE_SHA="${{ needs.detect-source-commit.outputs.source_sha }}"
+          FULL_SHA="${{ github.sha }}"
+          REPO_URL="https://github.com/${{ github.repository }}"
+
+          echo "Injecting Git information for Datadog Source Code Integration..."
+          echo "  Repository: ${REPO_URL}"
+          echo "  Full SHA: ${FULL_SHA}"
+          echo "  Short SHA: ${SOURCE_SHA}"
+
+          # Update DD_GIT_COMMIT_SHA and DD_GIT_REPOSITORY_URL in configmap
+          sed -i.bak "s|DD_GIT_COMMIT_SHA: \"placeholder\"|DD_GIT_COMMIT_SHA: \"${FULL_SHA}\"|g" \
+            k8s/config/configmap.yaml
+          sed -i.bak "s|DD_GIT_REPOSITORY_URL: \"https://github.com/iamnutz/mcp-agent-langchainjs-datadog\"|DD_GIT_REPOSITORY_URL: \"${REPO_URL}\"|g" \
+            k8s/config/configmap.yaml
+
+          echo "✓ Updated Git information in configmap:"
+          grep "DD_GIT_" k8s/config/configmap.yaml
+
       - name: Deploy with Canary Strategy
         if: steps.should-deploy.outputs.should_deploy == 'true'
         run: |
