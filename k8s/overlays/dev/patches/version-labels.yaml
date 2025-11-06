@@ -67,6 +67,12 @@ spec:
         env:
         - name: VERSION
           value: dev-local
+        - name: DD_DYNAMIC_INSTRUMENTATION_ENABLED
+          value: "true"
+        - name: DD_GIT_REPOSITORY_URL
+          value: "https://github.com/iamnutz/mcp-agent-langchainjs-datadog"
+        - name: DD_GIT_COMMIT_SHA
+          value: "placeholder"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -87,6 +93,12 @@ spec:
         env:
         - name: VERSION
           value: dev-local
+        - name: DD_DYNAMIC_INSTRUMENTATION_ENABLED
+          value: "true"
+        - name: DD_GIT_REPOSITORY_URL
+          value: "https://github.com/iamnutz/mcp-agent-langchainjs-datadog"
+        - name: DD_GIT_COMMIT_SHA
+          value: "placeholder"
 ---
 apiVersion: apps/v1
 kind: Deployment
