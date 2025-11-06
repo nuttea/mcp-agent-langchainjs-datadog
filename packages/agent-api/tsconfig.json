@@ -9,6 +9,7 @@
     "outDir": "dist",
     "rootDir": ".",
     "sourceMap": true,
+    "sourceRoot": "packages/agent-api/",
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
