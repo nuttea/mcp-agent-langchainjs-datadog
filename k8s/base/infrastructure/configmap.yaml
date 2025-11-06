@@ -43,3 +43,7 @@ data:
   DD_LLMOBS_AGENTLESS_ENABLED: "false"
   DD_LLMOBS_ML_APP: "contoso-burgers-agent"
   DD_SITE: "datadoghq.com"
+
+  # Note: DD_DYNAMIC_INSTRUMENTATION_ENABLED, DD_GIT_REPOSITORY_URL, and DD_GIT_COMMIT_SHA
+  # are now set in overlay patches (k8s/overlays/{env}/patches/version-labels.yaml)
+  # This makes them more visible when checking deployment specs
