@@ -427,14 +427,14 @@ jobs:
           echo "  Full SHA: ${FULL_SHA}"
           echo "  Short SHA: ${SOURCE_SHA}"
 
-          # Update DD_GIT_COMMIT_SHA and DD_GIT_REPOSITORY_URL in configmap
+          # Update DD_GIT_COMMIT_SHA and DD_GIT_REPOSITORY_URL in base configmap
           sed -i.bak "s|DD_GIT_COMMIT_SHA: \"placeholder\"|DD_GIT_COMMIT_SHA: \"${FULL_SHA}\"|g" \
-            k8s/config/configmap.yaml
+            k8s/base/infrastructure/configmap.yaml
           sed -i.bak "s|DD_GIT_REPOSITORY_URL: \"https://github.com/iamnutz/mcp-agent-langchainjs-datadog\"|DD_GIT_REPOSITORY_URL: \"${REPO_URL}\"|g" \
-            k8s/config/configmap.yaml
+            k8s/base/infrastructure/configmap.yaml
 
           echo "✓ Updated Git information in configmap:"
-          grep "DD_GIT_" k8s/config/configmap.yaml
+          grep "DD_GIT_" k8s/base/infrastructure/configmap.yaml
 
       - name: Deploy with Canary Strategy
         if: steps.should-deploy.outputs.should_deploy == 'true'

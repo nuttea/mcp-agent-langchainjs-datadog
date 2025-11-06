@@ -39,7 +39,12 @@ data:
   DD_TRACE_ENABLED: "true"
   DD_PROFILING_ENABLED: "true"
   DD_RUNTIME_METRICS_ENABLED: "true"
+  DD_DYNAMIC_INSTRUMENTATION_ENABLED: "true"
   DD_LLMOBS_ENABLED: "true"
   DD_LLMOBS_AGENTLESS_ENABLED: "false"
   DD_LLMOBS_ML_APP: "contoso-burgers-agent"
   DD_SITE: "datadoghq.com"
+
+  # Source Code Integration
+  DD_GIT_REPOSITORY_URL: "https://github.com/iamnutz/mcp-agent-langchainjs-datadog"
+  DD_GIT_COMMIT_SHA: "placeholder"  # This will be replaced by CI/CD pipeline
