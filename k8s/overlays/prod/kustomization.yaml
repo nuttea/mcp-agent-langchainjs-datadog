@@ -17,8 +17,8 @@ resources:
   - secrets.yaml
   - httproute.yaml
   - configmap-perf-flags.yaml
-  - ../../gateway/04-backendpolicy-iap.yaml
-  - ../../gateway/05-healthcheck-policy-iap.yaml
+  - backendpolicy-iap.yaml
+  - healthcheck-policy.yaml
 
 # Prod environment: Use commit SHA tags for immutable deployments
 # Images are built with commit SHA tags when code changes are merged to prod branch
