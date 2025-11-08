@@ -40,3 +40,6 @@ k8s/config/secrets.yaml
 **/secrets.yaml
 secrets.*.yaml
 k8s/postgres-dbm-setup.sql
+*secret.yaml
+*secrets.yaml
+oauth-*.yaml

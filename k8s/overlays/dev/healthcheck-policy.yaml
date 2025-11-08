@@ -1,0 +1,29 @@
+---
+# HealthCheckPolicy for agent-webapp (Dev Environment)
+# Uses /health endpoint to allow health checks to bypass IAP
+apiVersion: networking.gke.io/v1
+kind: HealthCheckPolicy
+metadata:
+  name: agent-webapp-health-check
+  namespace: mcp-agent-dev
+  labels:
+    app: agent-webapp
+    environment: dev
+    component: health-check
+spec:
+  targetRef:
+    group: ""
+    kind: Service
+    name: agent-webapp
+  default:
+    checkIntervalSec: 10
+    timeoutSec: 5
+    healthyThreshold: 2
+    unhealthyThreshold: 2
+    logConfig:
+      enabled: true
+    config:
+      type: HTTP
+      httpHealthCheck:
+        requestPath: /health
+        port: 80

@@ -1,0 +1,55 @@
+---
+# GCPHealthCheckPolicy for agent-webapp with IAP
+# This configures the health check to use /health endpoint instead of /
+# which is critical for IAP-enabled services, as health checks cannot authenticate
+#
+# Without this, health checks fail because:
+# 1. Health check requests GET /
+# 2. IAP intercepts (no auth cookie)
+# 3. IAP returns 302 redirect
+# 4. Health check expects 200, gets 302
+# 5. Backend marked UNHEALTHY
+# 6. User requests fail with ERR_TOO_MANY_REDIRECTS
+#
+# Documentation: /docs/deployment/iap-health-check-fix.md
+apiVersion: networking.gke.io/v1
+kind: HealthCheckPolicy
+metadata:
+  name: agent-webapp-health-check
+  namespace: mcp-agent-prod
+  labels:
+    app: agent-webapp
+    environment: prod
+    component: health-check
+spec:
+  # Apply this policy to the agent-webapp service
+  targetRef:
+    group: ""
+    kind: Service
+    name: agent-webapp
+  # Default health check configuration
+  default:
+    # Health check interval
+    checkIntervalSec: 10
+    # Timeout for health check
+    timeoutSec: 5
+    # Number of consecutive successes required to mark healthy
+    healthyThreshold: 2
+    # Number of consecutive failures required to mark unhealthy
+    unhealthyThreshold: 2
+    # Log health check results
+    logConfig:
+      enabled: true
+    # HTTP health check configuration
+    config:
+      type: HTTP
+      httpHealthCheck:
+        # CRITICAL: Use /health endpoint that bypasses IAP
+        # This endpoint is defined in nginx.conf and returns 200 OK directly
+        requestPath: /health
+        # Health check on port 80 (HTTP)
+        port: 80
+        # Optional: Add custom port name if needed
+        # portName: http
+        # Optional: Set proxy header
+        # proxyHeader: NONE

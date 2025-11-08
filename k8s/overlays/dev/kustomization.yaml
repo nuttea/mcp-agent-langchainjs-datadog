@@ -17,6 +17,7 @@ resources:
   - secrets.yaml
   - httproute.yaml
   - configmap-perf-flags.yaml
+  - healthcheck-policy.yaml
 
 # Dev environment: Always use :latest tag
 # Images are built and tagged with :latest on every push to main branch
