@@ -1,3 +1,6 @@
+// Load environment variables from .env file (for local development)
+import 'dotenv/config';
+
 // IMPORTANT: Datadog tracer must be imported first, before any other imports
 // Reference: https://docs.datadoghq.com/llm_observability/setup/sdk/nodejs/
 // This import initializes the Datadog tracer as a side effect
@@ -20,6 +23,8 @@ import { getAuthenticationUserId, getAzureOpenAiTokenProvider, getInternalUserId
 import { type AIChatCompletionRequest, type AIChatCompletionDelta } from './models.js';
 import { logger } from './logger.js';
 import { extractIAPUser, isIAPEnabled, getIAPUser } from './middleware/iap-auth.js';
+import { verifyGoogleToken, createSessionToken, isGoogleAuthEnabled } from './auth/google-oauth.js';
+import tracer from 'dd-trace';
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -138,12 +143,26 @@ app.get('/api/simulate/slow-error', async (req, _res) => {
 });
 
 // Get user info - implements the same logic as me-get Azure Function
-// Supports Azure Easy Auth, IAP, and anonymous mode for Kubernetes deployment
+// Supports Google OAuth (JWT), Azure Easy Auth, IAP, and anonymous mode
 app.get('/api/me', async (req, res) => {
   try {
     let authenticationUserId = getAuthenticationUserId(req as any);
 
-    // Check for IAP authentication first
+    // Check for Google OAuth JWT token first
+    if (!authenticationUserId) {
+      const authHeader = req.headers.authorization;
+      if (authHeader?.startsWith('Bearer ')) {
+        const token = authHeader.substring(7);
+        const { verifySessionToken } = await import('./auth/google-oauth.js');
+        const user = verifySessionToken(token);
+        if (user) {
+          authenticationUserId = user.email;
+          logger.info(`Using Google OAuth authenticated user: ${user.email}`);
+        }
+      }
+    }
+
+    // Check for IAP authentication
     if (!authenticationUserId) {
       const iapUser = getIAPUser(req);
       if (iapUser) {
@@ -184,6 +203,70 @@ app.get('/api/me', async (req, res) => {
   } catch (error) {
     console.error('Error in me-get handler', error);
     res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// Google OAuth authentication endpoint
+// Cloud-agnostic authentication that works with any infrastructure
+app.post('/api/auth/google', async (req, res) => {
+  try {
+    const { credential } = req.body;
+
+    if (!credential) {
+      res.status(400).json({ error: 'Missing credential in request body' });
+      return;
+    }
+
+    if (!isGoogleAuthEnabled()) {
+      res.status(503).json({ error: 'Google authentication is not enabled' });
+      return;
+    }
+
+    // Verify Google ID token
+    const user = await verifyGoogleToken(credential);
+    logger.info(`Google OAuth login: ${user.email}`);
+
+    // Create session token (JWT)
+    const sessionToken = createSessionToken(user);
+
+    // Create or get user in database using email as authentication ID
+    const userId = createHash('sha256').update(user.email).digest('hex').slice(0, 32);
+    const db = await UserDbService.getInstance();
+    let dbUser = await db.getUserById(userId);
+
+    if (!dbUser) {
+      dbUser = await db.createUser(userId);
+      logger.info(`Created new user from Google OAuth: ${user.email} (ID: ${userId})`);
+    } else {
+      logger.info(`Existing user logged in: ${user.email} (ID: ${userId})`);
+    }
+
+    // Add Datadog APM tags for authentication event
+    const span = tracer.scope().active();
+    if (span) {
+      span.setTag('usr.email', user.email);
+      span.setTag('usr.id', user.userId);
+      span.setTag('usr.name', user.name);
+      span.setTag('auth.provider', 'google-oauth');
+      span.setTag('auth.event', 'login');
+    }
+
+    // Return session token and user info
+    res.json({
+      token: sessionToken,
+      user: {
+        userId: dbUser.id,
+        email: user.email,
+        name: user.name,
+        picture: user.picture,
+      },
+    });
+  } catch (error: any) {
+    logger.error('Google OAuth authentication error:', error);
+    res.status(401).json({
+      error: 'Authentication failed',
+      message: error.message || 'Invalid Google token',
+    });
   }
 });
 

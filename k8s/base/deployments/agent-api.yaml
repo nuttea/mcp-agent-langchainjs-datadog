@@ -94,6 +94,22 @@ spec:
             secretKeyRef:
               name: app-secrets
               key: postgres-password
+        # Google OAuth Configuration (from secrets)
+        - name: GOOGLE_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: google-client-id
+        - name: GOOGLE_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: google-client-secret
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: jwt-secret
         resources:
           requests:
             memory: "512Mi"

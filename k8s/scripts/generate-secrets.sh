@@ -57,6 +57,28 @@ check_env_vars() {
     echo -e "  ${GREEN}✓${NC} OPENAI_API_KEY"
   fi
 
+  # Check Google OAuth variables (required for app-level authentication)
+  if [ -z "$GOOGLE_CLIENT_ID" ]; then
+    missing_vars+=("GOOGLE_CLIENT_ID")
+    echo -e "  ${RED}✗${NC} GOOGLE_CLIENT_ID"
+  else
+    echo -e "  ${GREEN}✓${NC} GOOGLE_CLIENT_ID"
+  fi
+
+  if [ -z "$GOOGLE_CLIENT_SECRET" ]; then
+    missing_vars+=("GOOGLE_CLIENT_SECRET")
+    echo -e "  ${RED}✗${NC} GOOGLE_CLIENT_SECRET"
+  else
+    echo -e "  ${GREEN}✓${NC} GOOGLE_CLIENT_SECRET"
+  fi
+
+  if [ -z "$JWT_SECRET" ]; then
+    missing_vars+=("JWT_SECRET")
+    echo -e "  ${RED}✗${NC} JWT_SECRET"
+  else
+    echo -e "  ${GREEN}✓${NC} JWT_SECRET"
+  fi
+
   # Check optional variables
   if [ -n "$VERTEX_AI_KEY" ]; then
     echo -e "  ${GREEN}✓${NC} VERTEX_AI_KEY (optional)"
@@ -110,6 +132,11 @@ generate_secrets_for_env() {
   local dd_api_key_b64=$(echo -n "$DD_API_KEY" | base64 | tr -d '\n')
   local openai_api_key_b64=$(echo -n "$OPENAI_API_KEY" | base64 | tr -d '\n')
 
+  # Google OAuth credentials (required for app-level authentication)
+  local google_client_id_b64=$(echo -n "$GOOGLE_CLIENT_ID" | base64 | tr -d '\n')
+  local google_client_secret_b64=$(echo -n "$GOOGLE_CLIENT_SECRET" | base64 | tr -d '\n')
+  local jwt_secret_b64=$(echo -n "$JWT_SECRET" | base64 | tr -d '\n')
+
   # Optional: Vertex AI key
   local vertex_ai_key_b64=""
   if [ -n "$VERTEX_AI_KEY" ]; then
@@ -156,6 +183,14 @@ data:
   # PostgreSQL password (base64 encoded - references postgres-secret)
   # Note: This duplicates the value from postgres-secret for compatibility
   postgres-password: $(echo -n "changeme123" | base64)
+
+  # Google OAuth Credentials (base64 encoded)
+  # Used for application-level Google authentication (cloud-agnostic)
+  google-client-id: ${google_client_id_b64}
+  google-client-secret: ${google_client_secret_b64}
+
+  # JWT Secret for session token signing (base64 encoded)
+  jwt-secret: ${jwt_secret_b64}
 EOF
 
   # Add optional secrets if they exist

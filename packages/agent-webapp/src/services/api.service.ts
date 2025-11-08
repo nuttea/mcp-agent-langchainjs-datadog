@@ -8,11 +8,34 @@ export type ChatRequestOptions = {
   apiUrl: string;
 };
 
+/**
+ * Get authentication token from localStorage
+ */
+function getAuthToken(): string | null {
+  return localStorage.getItem('auth_token');
+}
+
+/**
+ * Get headers with optional Authorization token
+ */
+function getHeaders(): HeadersInit {
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json',
+  };
+
+  const token = getAuthToken();
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  return headers;
+}
+
 export async function getCompletion(options: ChatRequestOptions) {
   const apiUrl = options.apiUrl || apiBaseUrl;
   const response = await fetch(`${apiUrl}/api/chats/stream`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getHeaders(),
     body: JSON.stringify({
       messages: options.messages,
       context: options.context || {},
