@@ -234,7 +234,7 @@ Set up alerts:
 
 ### ☐ 17. Update Team Documentation
 
-- [ ] Share [IAP-IMPLEMENTATION-SUMMARY.md](IAP-IMPLEMENTATION-SUMMARY.md) with team
+- [ ] Share [IAP_IMPLEMENTATION_SUMMARY.md](IAP_IMPLEMENTATION_SUMMARY.md) with team
 - [ ] Add IAP credentials to team password manager
 - [ ] Document backend service name for future IAM changes
 - [ ] Update runbooks with IAP troubleshooting steps
@@ -309,9 +309,9 @@ After successful deployment:
 
 ## Resources
 
-- **Detailed Setup Guide**: [docs/deployment/iap-setup.md](docs/deployment/iap-setup.md)
-- **Quick Start Guide**: [docs/deployment/iap-quick-start.md](docs/deployment/iap-quick-start.md)
-- **Architecture Diagram**: [docs/images/iap-architecture.md](docs/images/iap-architecture.md)
-- **Implementation Summary**: [IAP-IMPLEMENTATION-SUMMARY.md](IAP-IMPLEMENTATION-SUMMARY.md)
+- **Detailed Setup Guide**: [docs/deployment/IAP_SETUP.md](docs/deployment/IAP_SETUP.md)
+- **Quick Start Guide**: [docs/deployment/IAP_QUICK_START.md](docs/deployment/IAP_QUICK_START.md)
+- **Architecture Diagram**: [docs/images/IAP_ARCHITECTURE.md](docs/images/IAP_ARCHITECTURE.md)
+- **Implementation Summary**: [IAP_IMPLEMENTATION_SUMMARY.md](IAP_IMPLEMENTATION_SUMMARY.md)
 - **Google Cloud IAP Docs**: https://cloud.google.com/iap/docs
 - **Datadog APM**: https://app.datadoghq.com/apm

@@ -214,10 +214,10 @@ gkegw1-yi3w-mcp-agent-dev-agent-webapp-80-ccyzpp7srjbl
 
 All documentation applies to both environments:
 
-- [IAP-DEPLOY-NOW.md](IAP-DEPLOY-NOW.md) - Deployment guide
-- [IAP-QUICK-FIX.md](IAP-QUICK-FIX.md) - OAuth redirect URI fix
-- [docs/deployment/iap-setup.md](docs/deployment/iap-setup.md) - Comprehensive setup
-- [docs/deployment/iap-quick-start.md](docs/deployment/iap-quick-start.md) - Quick start
+- [IAP_DEPLOY_GUIDE.md](IAP_DEPLOY_GUIDE.md) - Deployment guide
+- [IAP_QUICK_FIX.md](IAP_QUICK_FIX.md) - OAuth redirect URI fix
+- [docs/deployment/IAP_SETUP.md](docs/deployment/IAP_SETUP.md) - Comprehensive setup
+- [docs/deployment/IAP_QUICK_START.md](docs/deployment/IAP_QUICK_START.md) - Quick start
 
 ## ✅ Next Steps Checklist
 

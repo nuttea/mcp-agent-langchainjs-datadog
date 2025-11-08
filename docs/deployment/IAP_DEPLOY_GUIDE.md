@@ -251,10 +251,10 @@ Everything is configured and ready to deploy:
 
 ## 🔗 Related Documentation
 
-- [IAP-HEALTH-CHECK-FIX.md](IAP-HEALTH-CHECK-FIX.md) - Detailed explanation
-- [IAP-REDIRECT-LOOP-TROUBLESHOOTING.md](IAP-REDIRECT-LOOP-TROUBLESHOOTING.md) - OAuth issues
-- [IAP-QUICK-FIX.md](IAP-QUICK-FIX.md) - Quick reference
-- [IAP-TEST-RESULTS.md](IAP-TEST-RESULTS.md) - Test results
+- [IAP_HEALTH_CHECK_FIX.md](IAP_HEALTH_CHECK_FIX.md) - Detailed explanation
+- [IAP_REDIRECT_LOOP_TROUBLESHOOTING.md](IAP_REDIRECT_LOOP_TROUBLESHOOTING.md) - OAuth issues
+- [IAP_QUICK_FIX.md](IAP_QUICK_FIX.md) - Quick reference
+- [IAP_TEST_RESULTS.md](IAP_TEST_RESULTS.md) - Test results
 
 ---
 
