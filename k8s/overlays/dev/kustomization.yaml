@@ -17,6 +17,8 @@ resources:
   - secrets.yaml
   - httproute.yaml
   - configmap-perf-flags.yaml
+  - healthcheck-policy.yaml
+  - backendpolicy-iap.yaml
 
 # Dev environment: Always use :latest tag
 # Images are built and tagged with :latest on every push to main branch
@@ -44,3 +46,4 @@ patches:
   - path: patches/postgres-init-job.yaml
   - path: patches/hpa.yaml
   - path: patches/version-labels.yaml
+  - path: patches/agent-api-iap.yaml

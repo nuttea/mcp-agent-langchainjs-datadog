@@ -19,6 +19,7 @@ import { PostgresChatMessageHistory } from './postgres-chat-history.js';
 import { getAuthenticationUserId, getAzureOpenAiTokenProvider, getInternalUserId } from './auth.js';
 import { type AIChatCompletionRequest, type AIChatCompletionDelta } from './models.js';
 import { logger } from './logger.js';
+import { extractIAPUser, isIAPEnabled, getIAPUser } from './middleware/iap-auth.js';
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -62,6 +63,15 @@ const titleSystemPrompt = `Create a title for this chat session, based on the us
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// IAP Authentication Middleware (conditionally enabled)
+// Extracts IAP user headers and attaches to request + Datadog traces
+if (isIAPEnabled()) {
+  app.use(extractIAPUser);
+  logger.info('IAP authentication enabled - extracting user headers');
+} else {
+  logger.info('IAP authentication disabled - running in anonymous mode');
+}
 
 // Health check
 app.get('/', (_req, res) => {
@@ -128,10 +138,20 @@ app.get('/api/simulate/slow-error', async (req, _res) => {
 });
 
 // Get user info - implements the same logic as me-get Azure Function
-// Supports both Azure Easy Auth and anonymous mode for Kubernetes deployment
+// Supports Azure Easy Auth, IAP, and anonymous mode for Kubernetes deployment
 app.get('/api/me', async (req, res) => {
   try {
     let authenticationUserId = getAuthenticationUserId(req as any);
+
+    // Check for IAP authentication first
+    if (!authenticationUserId) {
+      const iapUser = getIAPUser(req);
+      if (iapUser) {
+        // Use IAP email as the authentication user ID
+        authenticationUserId = iapUser.email;
+        logger.info(`Using IAP authenticated user: ${iapUser.email}`);
+      }
+    }
 
     // Fall back to anonymous user for Kubernetes/development environments
     if (!authenticationUserId) {
@@ -141,7 +161,7 @@ app.get('/api/me', async (req, res) => {
       if (allowAnonymous) {
         // Use a consistent anonymous user ID or generate one from session
         authenticationUserId = 'anonymous-user';
-        console.log('Using anonymous authentication mode');
+        logger.info('Using anonymous authentication mode');
       } else {
         res.status(401).json({ error: 'Unauthorized' });
         return;

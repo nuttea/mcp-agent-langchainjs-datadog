@@ -1,0 +1,24 @@
+---
+# Patch for agent-api deployment to enable IAP authentication (Dev)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-api
+spec:
+  template:
+    spec:
+      containers:
+      - name: agent-api
+        env:
+        # Enable IAP authentication
+        - name: ENABLE_IAP
+          value: "true"
+        # Enable IAP header logging for debugging in dev
+        - name: LOG_IAP_HEADERS
+          value: "true"
+        # Configure Datadog to capture client IP from X-Forwarded-For (GCP ALB standard)
+        - name: DD_TRACE_CLIENT_IP_HEADER
+          value: "X-Forwarded-For"
+        # Trace header propagation for IAP authentication headers
+        - name: DD_TRACE_HEADER_TAGS
+          value: "X-Goog-Authenticated-User-Email:iap.user.email,X-Goog-Authenticated-User-Id:iap.user.id"

@@ -1,0 +1,38 @@
+---
+# GCPBackendPolicy for IAP - Agent Webapp (Dev Environment)
+# This policy enables Identity-Aware Proxy (IAP) for user authentication
+# on the agent-webapp service accessed via dev.platform-engineering-demo.dev
+#
+# Prerequisites:
+# 1. OAuth 2.0 credentials created in Google Cloud Console (same as prod)
+# 2. Kubernetes secret 'oauth-client-secret' created with client_id and client_secret
+# 3. IAM permissions granted to authorized users (roles/iap.httpsResourceAccessor)
+#
+# Documentation: /docs/deployment/iap-setup.md
+apiVersion: networking.gke.io/v1
+kind: GCPBackendPolicy
+metadata:
+  name: agent-webapp-iap-policy
+  namespace: mcp-agent-dev
+  labels:
+    app: agent-webapp
+    environment: dev
+    security: iap-enabled
+spec:
+  # Apply this policy to the agent-webapp service
+  targetRef:
+    group: ""
+    kind: Service
+    name: agent-webapp
+  # Default backend configuration
+  default:
+    # IAP Configuration
+    iap:
+      # Enable Identity-Aware Proxy
+      enabled: true
+      # Reference to Kubernetes secret containing OAuth credentials
+      oauth2ClientSecret:
+        name: oauth-client-secret
+      # OAuth 2.0 Client ID (same as prod for simplicity)
+      # You can create a separate OAuth client for dev if needed
+      clientID: 449012790678-o4n20ce420kjuao68mciclp915dlrubj.apps.googleusercontent.com
