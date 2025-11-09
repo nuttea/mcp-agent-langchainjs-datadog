@@ -27,7 +27,7 @@ datadog:
             matchNames:
               - "mcp-agent-dev"
               - "mcp-agent-prod"
-          labelSelector:
+          podSelector:
             matchLabels:
               dd-ssi-js: "true"
           ddTraceVersions:
