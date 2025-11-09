@@ -1,4 +1,6 @@
-import { metrics } from 'dd-trace';
+import tracer from 'dd-trace';
+
+const metrics = tracer.dogstatsd || tracer;
 
 /**
  * Business metrics for Burger API

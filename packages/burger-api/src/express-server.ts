@@ -117,9 +117,8 @@ app.get('/api', async (_req: Request, res: Response) => {
 
 // Get all burgers
 app.get('/api/burgers', async (req: Request, res: Response) => {
-  const span = tracer.startSpan('burger.menu.browse', {
-    resource: 'get_all_burgers',
-  });
+  const span = tracer.startSpan('burger.menu.browse');
+  span.setTag('resource.name', 'get_all_burgers');
 
   try {
     // Inject CPU blocking if feature flag is enabled
@@ -345,9 +344,8 @@ async function validateAndCalculateToppingsPrice(
 // Create new order - implements the same logic as orders-post Azure Function
 app.post('/api/orders', async (req: Request, res: Response) => {
   // Create custom span for business-level order tracking
-  const orderSpan = tracer.startSpan('burger.order.create', {
-    resource: 'order_placement',
-  });
+  const orderSpan = tracer.startSpan('burger.order.create');
+  orderSpan.setTag('resource.name', 'order_placement');
 
   logger.info('Processing order creation request');
 
@@ -511,9 +509,8 @@ app.post('/api/orders', async (req: Request, res: Response) => {
 
 // Delete order - implements the same logic as orders-delete Azure Function
 app.delete('/api/orders/:id', async (req: Request, res: Response) => {
-  const cancelSpan = tracer.startSpan('burger.order.cancel', {
-    resource: req.params?.id || 'unknown',
-  });
+  const cancelSpan = tracer.startSpan('burger.order.cancel');
+  cancelSpan.setTag('resource.name', req.params?.id || 'unknown');
 
   logger.info({ params: req.params, query: req.query }, 'Processing order cancellation request');
 
@@ -646,9 +643,8 @@ app.get('/api/openapi', async (req: Request, res: Response) => {
 
 // Background worker for order state transitions (mimics Azure Functions timer)
 async function updateOrderStatuses() {
-  const workerSpan = tracer.startSpan('burger.orders.status_update_worker', {
-    resource: 'background_job',
-  });
+  const workerSpan = tracer.startSpan('burger.orders.status_update_worker');
+  workerSpan.setTag('resource.name', 'background_job');
 
   try {
     const db = await DbService.getInstance();

@@ -567,7 +567,7 @@ app.post('/api/chats/stream', async (req, res) => {
         name: 'load_mcp_tools',
         sessionId,
       },
-      async (span) => {
+      async (_span) => {
         const loadedTools = await loadMcpTools('burger', client);
         logger.info({ toolCount: loadedTools.length, sessionId }, 'Loaded tools from Burger MCP server');
 
@@ -603,7 +603,7 @@ app.post('/api/chats/stream', async (req, res) => {
         name: 'burger_assistant_agent',
         sessionId,
       },
-      async (span) => {
+      async (_span) => {
         // Annotate input
         llmobs.annotate({
           inputData: {
