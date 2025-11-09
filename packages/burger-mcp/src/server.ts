@@ -1,3 +1,7 @@
+// Import Datadog tracer first for SSI (Single Step Instrumentation)
+// This initializes the tracer as a side effect before other modules load
+import './dd-tracer.js';
+
 import process from 'node:process';
 import { randomUUID } from 'node:crypto';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';

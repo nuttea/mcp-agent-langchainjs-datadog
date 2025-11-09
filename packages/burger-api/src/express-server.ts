@@ -1,3 +1,7 @@
+// Import Datadog tracer first for SSI (Single Step Instrumentation)
+// This initializes the tracer as a side effect before other modules load
+import './dd-tracer.js';
+
 import express, { type Request, type Response } from 'express';
 import cors from 'cors';
 import fs from 'node:fs/promises';
@@ -9,7 +13,7 @@ import { ToppingCategory } from './topping.js';
 import { OrderStatus, type OrderItem } from './order.js';
 import { featureFlags } from './feature-flags.js';
 import { logger } from './logger.js';
-import tracer from 'dd-trace';
+import { ddTracer as tracer } from './dd-tracer.js';
 import { BurgerMetrics } from './metrics.js';
 
 const app = express();

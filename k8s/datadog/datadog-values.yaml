@@ -17,22 +17,21 @@ datadog:
   apiKeyExistingSecret: "datadog-secret"
 
   # APM with Single Step Instrumentation
+  # SSI is selectively enabled for services with label dd-ssi-js=true
   apm:
     instrumentation:
       enabled: true
       targets:
-        - name: "mcp-agent-apps"
+        - name: "mcp-agent-apps-ssi"
           namespaceSelector:
             matchNames:
               - "mcp-agent-dev"
               - "mcp-agent-prod"
+          labelSelector:
+            matchLabels:
+              dd-ssi-js: "true"
           ddTraceVersions:
-            #java: "1"
-            #python: "3"
             js: "5"
-            #php: "1"
-            #dotnet: "3"
-            #ruby: "2"
           ddTraceConfigs:
             - name: "DD_PROFILING_ENABLED"
               value: "auto"
