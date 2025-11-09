@@ -225,14 +225,15 @@ export class AuthComponent extends LitElement {
   }
 
   private initializeGoogleSignIn() {
-    // Check if Google Identity Services is loaded
-    if (typeof (window as any).google === 'undefined') {
-      console.warn('Google Identity Services not loaded yet');
+    const buttonContainer = this.shadowRoot?.querySelector('#google-signin-button');
+    if (!buttonContainer) {
       return;
     }
 
-    const buttonContainer = this.shadowRoot?.querySelector('#google-signin-button');
-    if (!buttonContainer) {
+    // Check if Google Identity Services is loaded
+    if (typeof (window as any).google === 'undefined') {
+      // Google SDK not loaded yet, retry after a short delay
+      setTimeout(() => this.initializeGoogleSignIn(), 100);
       return;
     }
 
@@ -244,19 +245,22 @@ export class AuthComponent extends LitElement {
         auto_select: false,
       });
 
-      // Render the button
+      // Render the button with improved styling
       (window as any).google.accounts.id.renderButton(
         buttonContainer,
         {
-          theme: 'outline',
+          theme: 'filled_blue',  // More prominent button
           size: 'large',
           text: 'signin_with',
           shape: 'rectangular',
           logo_alignment: 'left',
+          width: 280,  // Fixed width for consistency
         }
       );
     } catch (error) {
       console.error('Failed to initialize Google Sign-In:', error);
+      // Retry once on error
+      setTimeout(() => this.initializeGoogleSignIn(), 500);
     }
   }
 
@@ -359,6 +363,12 @@ export class AuthComponent extends LitElement {
       justify-content: center;
       align-items: center;
       min-height: 44px;
+      padding: var(--space-md);
+
+      /* Add subtle container styling */
+      background: rgba(255, 255, 255, 0.5);
+      border-radius: var(--border-radius);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     }
     .divider {
       display: flex;
