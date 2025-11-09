@@ -21,6 +21,25 @@ title: Home
 - [Testing](#testing)
 - [Monitoring](#monitoring)
 
+---
+
+## 🍔 **NEW: Bits Learn to Bites Blog Series!**
+
+Learn Datadog observability through bite-sized lessons using this project as a real-world example.
+
+**[📖 Read the Blog Series →](./blog/)**
+
+**Latest Episode:** [Episode 1: The Secret Sauce - SSI](./blog/episode-01-ssi.md)
+
+**What you'll learn:**
+- SSI (Single Step Instrumentation) for zero-code APM
+- Structured logging with trace correlation
+- LLM Observability for AI agents
+- Business metrics and dashboards
+- **Includes AI prompts** for exploring with Claude + Datadog MCP!
+
+---
+
 ## Overview
 
 This project demonstrates how to build production-ready AI agents using **LangChain.js** and **Model Context Protocol (MCP)**. It features a complete burger ordering system with REST APIs, web interfaces, and an MCP server that enables AI agents to interact with real-world services.
