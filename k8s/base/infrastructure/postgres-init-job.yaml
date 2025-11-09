@@ -201,16 +201,17 @@ spec:
           psql -f /tmp/init.sql
 
           echo "Setting up Datadog DBM monitoring user..."
-          cat > /tmp/datadog-setup.sql << 'EOSQL'
+          # Use psql with variables instead of envsubst (not available in alpine)
+          psql -v datadog_pass="$DATADOG_PASSWORD" << 'EOSQL'
           -- Create Datadog monitoring user for DBM
           DO $$
           BEGIN
             IF NOT EXISTS (SELECT FROM pg_catalog.pg_user WHERE usename = 'datadog') THEN
-              CREATE USER datadog WITH PASSWORD '${DATADOG_PASSWORD}';
+              EXECUTE 'CREATE USER datadog WITH PASSWORD ' || quote_literal(:'datadog_pass');
               RAISE NOTICE 'Created datadog user';
             ELSE
               -- Update password in case it changed
-              ALTER USER datadog WITH PASSWORD '${DATADOG_PASSWORD}';
+              EXECUTE 'ALTER USER datadog WITH PASSWORD ' || quote_literal(:'datadog_pass');
               RAISE NOTICE 'Updated datadog user password';
             END IF;
           END
@@ -251,12 +252,6 @@ spec:
           LIMIT 5;
 
           EOSQL
-
-          # Use envsubst to replace ${DATADOG_PASSWORD} with actual value
-          envsubst < /tmp/datadog-setup.sql > /tmp/datadog-setup-expanded.sql
-
-          echo "Executing Datadog DBM setup..."
-          psql -f /tmp/datadog-setup-expanded.sql
 
           echo "Database initialization completed successfully!"
           echo "✓ Database schema and seed data initialized"
