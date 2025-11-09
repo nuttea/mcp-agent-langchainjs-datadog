@@ -6,6 +6,7 @@ import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import express, { Request, Response } from 'express';
 import { burgerApiUrl } from './config.js';
 import { getMcpServer } from './mcp.js';
+import { logger } from './logger.js';
 
 const app = express();
 app.use(express.json());
@@ -23,7 +24,7 @@ const transports: Record<string, StreamableHTTPServerTransport | SSEServerTransp
 
 // Handle all MCP Streamable HTTP requests (GET, POST, DELETE) on a single endpoint
 app.all('/mcp', async (request: Request, response: Response) => {
-  console.log(`Received ${request.method} request to /mcp`);
+  logger.info({ method: request.method }, 'Received request to /mcp');
 
   try {
     // Check for existing session ID
@@ -53,7 +54,7 @@ app.all('/mcp', async (request: Request, response: Response) => {
         sessionIdGenerator: () => randomUUID(),
         onsessioninitialized(sessionId) {
           // Store the transport by session ID when session is initialized
-          console.log(`StreamableHTTP session initialized with ID: ${sessionId}`);
+          logger.info({ sessionId }, 'StreamableHTTP session initialized');
           transports[sessionId] = transport;
         },
       });
@@ -62,7 +63,7 @@ app.all('/mcp', async (request: Request, response: Response) => {
       transport.onclose = () => {
         const sid = transport.sessionId;
         if (sid && transports[sid]) {
-          console.log(`Transport closed for session ${sid}, removing from transports map`);
+          logger.info({ sessionId: sid }, 'Transport closed, removing from transports map');
           delete transports[sid];
         }
       };
@@ -86,7 +87,7 @@ app.all('/mcp', async (request: Request, response: Response) => {
     // Handle the request with the transport
     await transport.handleRequest(request, response, request.body);
   } catch (error) {
-    console.error('Error handling MCP request:', error);
+    logger.error({ err: error }, 'Error handling MCP request');
     if (!response.headersSent) {
       response.status(500).json({
         jsonrpc: '2.0',
@@ -105,7 +106,7 @@ app.all('/mcp', async (request: Request, response: Response) => {
 // ----------------------------------------------------------------------------
 
 app.get('/sse', async (request: Request, response: Response) => {
-  console.log('Received GET request to /sse (deprecated SSE transport)');
+  logger.info('Received GET request to /sse (deprecated SSE transport)');
   const transport = new SSEServerTransport('/messages', response);
   transports[transport.sessionId] = transport;
   response.on('close', () => {
@@ -145,27 +146,27 @@ app.post('/messages', async (request: Request, response: Response) => {
 // Start the server
 const PORT = process.env.FUNCTIONS_CUSTOMHANDLER_PORT || process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Burger MCP server listening on port ${PORT} (Using burger API URL: ${burgerApiUrl})`);
+  logger.info({ port: PORT, burgerApiUrl }, 'Burger MCP server listening');
 });
 
 // Handle server shutdown
 process.on('SIGINT', async () => {
-  console.log('Shutting down server...');
+  logger.info('Shutting down server');
 
   // Close all active transports to properly clean up resources
   for (const sessionId in transports) {
     if (Object.hasOwn(transports, sessionId)) {
       try {
-        console.log(`Closing transport for session ${sessionId}`);
+        logger.info({ sessionId }, 'Closing transport for session');
         // eslint-disable-next-line no-await-in-loop
         await transports[sessionId].close();
         delete transports[sessionId];
       } catch (error) {
-        console.error(`Error closing transport for session ${sessionId}:`, error);
+        logger.error({ err: error, sessionId }, 'Error closing transport for session');
       }
     }
   }
 
-  console.log('Server shutdown complete');
+  logger.info('Server shutdown complete');
   process.exit(0);
 });

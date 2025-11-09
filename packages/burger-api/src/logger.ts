@@ -1,17 +1,11 @@
-import tracer from 'dd-trace';
 import pino from 'pino';
 
 // When using SSI (Single Step Instrumentation), dd-trace is already initialized
-// by the Datadog Cluster Agent. We just import and use the tracer directly.
-// SSI automatically enables:
-// - Log injection (DD_LOGS_INJECTION=true)
-// - Profiling (DD_PROFILING_ENABLED=true)
-// - Runtime metrics (DD_RUNTIME_METRICS_ENABLED=true)
+// by the Datadog Cluster Agent. Pino automatically gets trace IDs injected
+// when DD_LOGS_INJECTION=true is set in the environment.
 //
-// No need to call tracer.init() - it would conflict with SSI.
+// This logger provides structured JSON logging that correlates with APM traces.
 
-// Create pino logger with structured logging
-// SSI automatically injects trace IDs into pino logs when DD_LOGS_INJECTION=true
 export const logger = pino({
   level: process.env.LOG_LEVEL || 'info',
   formatters: {
@@ -31,6 +25,3 @@ export const logger = pino({
     },
   }),
 });
-
-// Export tracer for advanced usage (custom spans)
-export { tracer };
