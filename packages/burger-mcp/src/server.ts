@@ -76,6 +76,21 @@ app.all('/mcp', async (request: Request, response: Response) => {
       const server = getMcpServer();
       await server.connect(transport);
     } else {
+      // Handle GET requests for SSE streaming
+      if (request.method === 'GET') {
+        // Per MCP spec: return 405 to indicate server does not offer SSE stream at this endpoint
+        // Streamable HTTP uses POST for both sending and receiving, not GET+SSE
+        response.status(405).json({
+          jsonrpc: '2.0',
+          error: {
+            code: -32_000,
+            message: 'Method Not Allowed: This server uses Streamable HTTP (POST only), not SSE (GET)',
+          },
+          id: null,
+        });
+        return;
+      }
+
       // Invalid request - no session ID or not initialization request
       response.status(400).json({
         jsonrpc: '2.0',
