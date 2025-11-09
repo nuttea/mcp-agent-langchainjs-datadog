@@ -79,6 +79,14 @@ check_env_vars() {
     echo -e "  ${GREEN}✓${NC} JWT_SECRET"
   fi
 
+  # Check Datadog Postgres credentials
+  if [ -z "$DATADOG_POSTGRES_PASSWORD" ]; then
+    missing_vars+=("DATADOG_POSTGRES_PASSWORD")
+    echo -e "  ${RED}✗${NC} DATADOG_POSTGRES_PASSWORD"
+  else
+    echo -e "  ${GREEN}✓${NC} DATADOG_POSTGRES_PASSWORD"
+  fi
+
   # Check optional variables
   if [ -n "$VERTEX_AI_KEY" ]; then
     echo -e "  ${GREEN}✓${NC} VERTEX_AI_KEY (optional)"
@@ -136,6 +144,9 @@ generate_secrets_for_env() {
   local google_client_id_b64=$(echo -n "$GOOGLE_CLIENT_ID" | base64 | tr -d '\n')
   local google_client_secret_b64=$(echo -n "$GOOGLE_CLIENT_SECRET" | base64 | tr -d '\n')
   local jwt_secret_b64=$(echo -n "$JWT_SECRET" | base64 | tr -d '\n')
+
+  # Datadog Postgres credentials (required for DBM)
+  local datadog_postgres_password_b64=$(echo -n "$DATADOG_POSTGRES_PASSWORD" | base64 | tr -d '\n')
 
   # Optional: Vertex AI key
   local vertex_ai_key_b64=""
@@ -213,9 +224,34 @@ EOF
   # Add final newline
   echo "" >> "$output_file"
 
+  # Generate separate datadog-postgres-credentials secret
+  cat >> "$output_file" <<EOF
+---
+# Datadog DBM Credentials
+# Used by Datadog agent to monitor PostgreSQL database
+apiVersion: v1
+kind: Secret
+metadata:
+  name: datadog-postgres-credentials
+  namespace: ${namespace}
+  labels:
+    app: mcp-agent
+    environment: ${target_env}
+    managed-by: script
+type: Opaque
+data:
+  # Datadog user password for PostgreSQL monitoring (base64 encoded)
+  password: ${datadog_postgres_password_b64}
+EOF
+
+  echo "" >> "$output_file"
+
   echo -e "${GREEN}✓${NC} Secrets file generated successfully!"
   echo -e "  File: ${YELLOW}${output_file}${NC}"
   echo -e "  Namespace: ${YELLOW}${namespace}${NC}"
+  echo -e "  Includes:"
+  echo -e "    - app-secrets (API keys, OAuth, JWT)"
+  echo -e "    - datadog-postgres-credentials (DBM monitoring)"
   echo ""
 }
 
