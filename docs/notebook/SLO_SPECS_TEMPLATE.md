@@ -47,7 +47,7 @@ Total Requests: sum:trace.express.request.hits{service:{service-name},env:{envir
 **Definition:** Percentage of requests completing within target latency threshold
 
 **Measurement:**
-- **Good Events:** Requests with p95 latency d {X}ms
+- **Good Events:** Requests with p95 latency <= {X}ms
 - **Total Events:** All HTTP requests
 - **Formula:** `(requests_within_threshold / total_requests) * 100`
 
@@ -58,9 +58,9 @@ P99 Latency: p99:trace.express.request{service:{service-name},env:{environment},
 ```
 
 **Latency Thresholds:**
-- **Fast (p50):** d {Y}ms
-- **Acceptable (p95):** d {X}ms
-- **Slow (p99):** d {Z}ms
+- **Fast (p50):** <= {Y}ms
+- **Acceptable (p95):** <= {X}ms
+- **Slow (p99):** <= {Z}ms
 
 **Why This Matters:** Response time directly affects user satisfaction. Slow responses lead to poor user experience and potential timeouts.
 
@@ -133,7 +133,7 @@ query:
 
 **Datadog SLO Configuration:**
 ```yaml
-name: "{Service Name} - Latency p95 d {X}ms (99%)"
+name: "{Service Name} - Latency p95 <= {X}ms (99%)"
 type: metric
 description: "Percentage of requests completing within {X}ms for {service-name}"
 tags:
@@ -278,25 +278,25 @@ tags:
 
 ### When Error Budget is Warning (25-50% remaining)
 
--   Increase review rigor for changes
--   Prioritize stability over new features
--   Schedule deploys during low-traffic periods
--   Begin investigating recurring issues
+- ï¿½ Increase review rigor for changes
+- ï¿½ Prioritize stability over new features
+- ï¿½ Schedule deploys during low-traffic periods
+- ï¿½ Begin investigating recurring issues
 
 ### When Error Budget is Critical (<25% remaining)
 
-- =¨ **Freeze non-critical deployments**
-- =¨ All hands on deck for reliability improvements
-- =¨ Daily error budget review meetings
-- =¨ Root cause analysis for all incidents
-- =¨ Implement quick wins to improve reliability
+- =ï¿½ **Freeze non-critical deployments**
+- =ï¿½ All hands on deck for reliability improvements
+- =ï¿½ Daily error budget review meetings
+- =ï¿½ Root cause analysis for all incidents
+- =ï¿½ Implement quick wins to improve reliability
 
 ### When Error Budget is Exhausted (0% remaining)
 
-- =Ñ **FULL DEPLOYMENT FREEZE** (except hotfixes)
-- =Ñ Emergency reliability sprint
-- =Ñ Executive escalation
-- =Ñ Post-mortem required with action items
+- =ï¿½ **FULL DEPLOYMENT FREEZE** (except hotfixes)
+- =ï¿½ Emergency reliability sprint
+- =ï¿½ Executive escalation
+- =ï¿½ Post-mortem required with action items
 
 ---
 
