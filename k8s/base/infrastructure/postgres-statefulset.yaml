@@ -27,55 +27,8 @@ spec:
         tags.datadoghq.com/service: "postgres"
         tags.datadoghq.com/version: "16"
       annotations:
-        ad.datadoghq.com/postgres.checks: |
-          {
-            "postgres": {
-              "init_config": {},
-              "instances": [
-                {
-                  "host": "postgres-0.postgres.mcp-agent-dev.svc.cluster.local",
-                  "port": 5432,
-                  "username": "datadog",
-                  "password": "ENC[k8s_secret@mcp-agent-dev/datadog-postgres-credentials/password]",
-                  "dbname": "burgerdb",
-                  "dbm": true,
-                  "query_metrics": {
-                    "enabled": true,
-                    "run_sync": false,
-                    "collection_interval": 10
-                  },
-                  "query_samples": {
-                    "enabled": true,
-                    "run_sync": false,
-                    "collection_interval": 10,
-                    "explain_function": "datadog.explain_statement",
-                    "explained_queries_per_hour_per_query": 60,
-                    "samples_per_hour_per_query": 15
-                  },
-                  "query_activity": {
-                    "enabled": true,
-                    "collection_interval": 10
-                  },
-                  "collect_schemas": {
-                    "enabled": true,
-                    "collection_interval": 600
-                  },
-                  "ssl": "disable",
-                  "tags": [
-                    "env:dev",
-                    "service:postgres",
-                    "app:burgers-ai-agent",
-                    "database:burgerdb"
-                  ],
-                  "relations": [
-                    {
-                      "relation_regex": ".*"
-                    }
-                  ]
-                }
-              ]
-            }
-          }
+        # DBM check configuration moved to Service for Cluster Agent autodiscovery
+        # Keeping logs annotation on Pod for log collection
         ad.datadoghq.com/postgres.logs: '[{"source":"postgresql","service":"postgres"}]'
     spec:
       # Pod-level security context (postgres runs as UID 999 or 70 depending on image)

@@ -4,6 +4,59 @@ metadata:
   name: postgres
   labels:
     app: postgres
+    tags.datadoghq.com/env: "dev"
+    tags.datadoghq.com/service: "postgres"
+  annotations:
+    ad.datadoghq.com/postgres.checks: |
+      {
+        "postgres": {
+          "init_config": {},
+          "instances": [
+            {
+              "host": "%%host%%",
+              "port": 5432,
+              "username": "datadog",
+              "password": "ENC[k8s_secret@%%kube_namespace%%/datadog-postgres-credentials/password]",
+              "dbname": "burgerdb",
+              "dbm": true,
+              "query_metrics": {
+                "enabled": true,
+                "run_sync": false,
+                "collection_interval": 10
+              },
+              "query_samples": {
+                "enabled": true,
+                "run_sync": false,
+                "collection_interval": 10,
+                "explain_function": "datadog.explain_statement",
+                "explained_queries_per_hour_per_query": 60,
+                "samples_per_hour_per_query": 15
+              },
+              "query_activity": {
+                "enabled": true,
+                "collection_interval": 10
+              },
+              "collect_schemas": {
+                "enabled": true,
+                "collection_interval": 600
+              },
+              "ssl": "disable",
+              "tags": [
+                "env:dev",
+                "service:postgres",
+                "app:burgers-ai-agent",
+                "database:burgerdb"
+              ],
+              "relations": [
+                {
+                  "relation_regex": ".*"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ad.datadoghq.com/postgres.logs: '[{"source":"postgresql","service":"postgres"}]'
 spec:
   ports:
   - port: 5432
