@@ -224,16 +224,22 @@ spec:
           psql -c "GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA datadog TO datadog;"
           psql -c "ALTER DEFAULT PRIVILEGES IN SCHEMA datadog GRANT EXECUTE ON FUNCTIONS TO datadog;"
 
-          # Create explain function for query samples
+          # Create explain function for query samples (official Datadog version)
           psql -c "CREATE OR REPLACE FUNCTION datadog.explain_statement(
             l_query TEXT,
-            OUT explain TEXT
+            OUT explain JSON
           )
-          RETURNS SETOF TEXT AS \$\$
+          RETURNS SETOF JSON AS \$\$
+          DECLARE
+            curs REFCURSOR;
+            plan JSON;
           BEGIN
-            RETURN QUERY EXECUTE 'EXPLAIN (FORMAT JSON) ' || l_query;
+            OPEN curs FOR EXECUTE pg_catalog.concat('EXPLAIN (FORMAT JSON) ', l_query);
+            FETCH curs INTO plan;
+            CLOSE curs;
+            RETURN QUERY SELECT plan;
           END;
-          \$\$ LANGUAGE plpgsql SECURITY DEFINER;"
+          \$\$ LANGUAGE plpgsql RETURNS NULL ON NULL INPUT SECURITY DEFINER;"
 
           # Grant execute permission on explain function
           psql -c "GRANT EXECUTE ON FUNCTION datadog.explain_statement(TEXT) TO datadog;"
