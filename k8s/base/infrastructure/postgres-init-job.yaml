@@ -200,7 +200,11 @@ spec:
           echo "Executing SQL initialization script..."
           psql -f /tmp/init.sql
 
-          echo "Setting up Datadog DBM monitoring user..."
+          echo "Setting up Datadog DBM monitoring..."
+
+          # Create pg_stat_statements extension (required for DBM query metrics)
+          psql -c "CREATE EXTENSION IF NOT EXISTS pg_stat_statements;"
+
           # Create Datadog user using dynamic SQL with password from environment
           psql -c "DO \$\$
           BEGIN
