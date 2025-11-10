@@ -29,6 +29,7 @@ spec:
       annotations:
         # DBM configuration on Pod for StatefulSet autodiscovery
         # For StatefulSets with headless services, pod-level annotations work best
+        # NOTE: Host is overridden per environment in overlay patches for proper DBM-APM correlation
         ad.datadoghq.com/postgres.checks: |
           {
             "postgres": {
@@ -41,6 +42,7 @@ spec:
                   "password": "qOQQapEkfrydmKLbsC6/tn+C8lQdYWuoypg9Q3H39Ac=",
                   "dbname": "burgerdb",
                   "dbm": true,
+                  "dbstrict": true,
                   "query_metrics": {
                     "enabled": true,
                     "run_sync": false,

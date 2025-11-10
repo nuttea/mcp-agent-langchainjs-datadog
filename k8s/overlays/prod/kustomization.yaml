@@ -45,6 +45,7 @@ images:
 patches:
   - path: patches/configmap.yaml
   - path: patches/postgres-init-job.yaml
+  - path: patches/postgres-statefulset-dbm.yaml
   - path: patches/resources.yaml
   - path: patches/hpa.yaml
   - path: patches/version-labels.yaml
