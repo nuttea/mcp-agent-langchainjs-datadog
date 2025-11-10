@@ -38,7 +38,7 @@ spec:
                   "host": "%%host%%",
                   "port": 5432,
                   "username": "datadog",
-                  "password": "ENC[k8s_secret@%%kube_namespace%%/datadog-postgres-credentials/password]",
+                  "password": "qOQQapEkfrydmKLbsC6/tn+C8lQdYWuoypg9Q3H39Ac=",
                   "dbname": "burgerdb",
                   "dbm": true,
                   "query_metrics": {
