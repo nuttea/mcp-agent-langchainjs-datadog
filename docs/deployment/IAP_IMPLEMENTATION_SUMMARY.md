@@ -51,7 +51,7 @@ This document summarizes the implementation of Google Cloud Identity-Aware Proxy
 ### 3. Documentation
 
 #### Comprehensive Setup Guide
-- **File**: [docs/deployment/iap-setup.md](docs/deployment/iap-setup.md)
+- **File**: [docs/deployment/IAP_SETUP.md](docs/deployment/IAP_SETUP.md)
 - Complete step-by-step setup instructions
 - OAuth 2.0 configuration guide
 - Kubernetes secret management
@@ -62,7 +62,7 @@ This document summarizes the implementation of Google Cloud Identity-Aware Proxy
 - Security considerations
 
 #### Quick Start Guide
-- **File**: [docs/deployment/iap-quick-start.md](docs/deployment/iap-quick-start.md)
+- **File**: [docs/deployment/IAP_QUICK_START.md](docs/deployment/IAP_QUICK_START.md)
 - Condensed setup instructions
 - Manual and automated setup options
 - Verification steps
@@ -187,8 +187,8 @@ make deploy ENV=prod
 - ✅ `packages/agent-api/src/express-server.ts` (modified)
 
 ### Documentation
-- ✅ `docs/deployment/iap-setup.md` (new)
-- ✅ `docs/deployment/iap-quick-start.md` (new)
+- ✅ `docs/deployment/IAP_SETUP.md` (new)
+- ✅ `docs/deployment/IAP_QUICK_START.md` (new)
 
 ### Scripts
 - ✅ `k8s/scripts/setup-iap.sh` (new)
@@ -290,7 +290,7 @@ kubectl set env deployment/agent-api ENABLE_IAP=false -n mcp-agent-prod
 
 For issues or questions:
 
-1. **Documentation**: [docs/deployment/iap-setup.md](docs/deployment/iap-setup.md)
+1. **Documentation**: [docs/deployment/IAP_SETUP.md](docs/deployment/IAP_SETUP.md)
 2. **Troubleshooting**: Check "Troubleshooting" section in docs
 3. **Google Cloud IAP**: https://cloud.google.com/iap/docs
 4. **Datadog Support**: https://docs.datadoghq.com

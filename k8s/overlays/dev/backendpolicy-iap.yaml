@@ -8,7 +8,7 @@
 # 2. Kubernetes secret 'oauth-client-secret' created with client_id and client_secret
 # 3. IAM permissions granted to authorized users (roles/iap.httpsResourceAccessor)
 #
-# Documentation: /docs/deployment/iap-setup.md
+# Documentation: /docs/deployment/IAP_SETUP.md
 apiVersion: networking.gke.io/v1
 kind: GCPBackendPolicy
 metadata:

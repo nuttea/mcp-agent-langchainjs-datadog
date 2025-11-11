@@ -27,18 +27,22 @@ spec:
         tags.datadoghq.com/service: "postgres"
         tags.datadoghq.com/version: "16"
       annotations:
+        # DBM configuration on Pod for StatefulSet autodiscovery
+        # For StatefulSets with headless services, pod-level annotations work best
+        # NOTE: Host is overridden per environment in overlay patches for proper DBM-APM correlation
         ad.datadoghq.com/postgres.checks: |
           {
             "postgres": {
               "init_config": {},
               "instances": [
                 {
-                  "host": "postgres-0.postgres.mcp-agent-dev.svc.cluster.local",
+                  "host": "%%host%%",
                   "port": 5432,
                   "username": "datadog",
-                  "password": "ENC[k8s_secret@mcp-agent-dev/datadog-postgres-credentials/password]",
+                  "password": "qOQQapEkfrydmKLbsC6/tn+C8lQdYWuoypg9Q3H39Ac=",
                   "dbname": "burgerdb",
                   "dbm": true,
+                  "dbstrict": true,
                   "query_metrics": {
                     "enabled": true,
                     "run_sync": false,

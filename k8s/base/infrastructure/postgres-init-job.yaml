@@ -49,6 +49,11 @@ spec:
             secretKeyRef:
               name: postgres-secret
               key: POSTGRES_DB
+        - name: DATADOG_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: datadog-postgres-credentials
+              key: password
         command:
         - /bin/sh
         - -c
@@ -195,4 +200,59 @@ spec:
           echo "Executing SQL initialization script..."
           psql -f /tmp/init.sql
 
+          echo "Setting up Datadog DBM monitoring..."
+
+          # Create pg_stat_statements extension (required for DBM query metrics)
+          psql -c "CREATE EXTENSION IF NOT EXISTS pg_stat_statements;"
+
+          # Create Datadog user using dynamic SQL with password from environment
+          psql -c "DO \$\$
+          BEGIN
+            IF NOT EXISTS (SELECT FROM pg_catalog.pg_user WHERE usename = 'datadog') THEN
+              EXECUTE format('CREATE USER datadog WITH PASSWORD %L', '${DATADOG_PASSWORD}');
+              RAISE NOTICE 'Created datadog user';
+            ELSE
+              EXECUTE format('ALTER USER datadog WITH PASSWORD %L', '${DATADOG_PASSWORD}');
+              RAISE NOTICE 'Updated datadog user password';
+            END IF;
+          END
+          \$\$;"
+
+          # Grant monitoring permissions
+          psql -c "GRANT pg_monitor TO datadog;"
+          psql -c "GRANT SELECT ON pg_stat_database TO datadog;"
+
+          # Create schema for explain function
+          psql -c "CREATE SCHEMA IF NOT EXISTS datadog;"
+          psql -c "GRANT USAGE ON SCHEMA datadog TO datadog;"
+          psql -c "GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA datadog TO datadog;"
+          psql -c "ALTER DEFAULT PRIVILEGES IN SCHEMA datadog GRANT EXECUTE ON FUNCTIONS TO datadog;"
+
+          # Create explain function for query samples (official Datadog version)
+          psql -c "CREATE OR REPLACE FUNCTION datadog.explain_statement(
+            l_query TEXT,
+            OUT explain JSON
+          )
+          RETURNS SETOF JSON AS \$\$
+          DECLARE
+            curs REFCURSOR;
+            plan JSON;
+          BEGIN
+            OPEN curs FOR EXECUTE pg_catalog.concat('EXPLAIN (FORMAT JSON) ', l_query);
+            FETCH curs INTO plan;
+            CLOSE curs;
+            RETURN QUERY SELECT plan;
+          END;
+          \$\$ LANGUAGE plpgsql RETURNS NULL ON NULL INPUT SECURITY DEFINER;"
+
+          # Grant execute permission on explain function
+          psql -c "GRANT EXECUTE ON FUNCTION datadog.explain_statement(TEXT) TO datadog;"
+
+          # Verify setup
+          echo "Verifying Datadog user and permissions..."
+          psql -c "SELECT usename, usesuper FROM pg_user WHERE usename = 'datadog';"
+          psql -c "SELECT schema_name FROM information_schema.schemata WHERE schema_name = 'datadog';"
+
           echo "Database initialization completed successfully!"
+          echo "✓ Database schema and seed data initialized"
+          echo "✓ Datadog DBM monitoring user configured"

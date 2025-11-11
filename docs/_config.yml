@@ -4,12 +4,14 @@ theme: jekyll-theme-cayman
 show_downloads: false
 
 # GitHub repository
-repository: Azure-Samples/mcp-agent-langchainjs
+repository: nuttea/mcp-agent-langchainjs-datadog
 
 # Navigation
 navigation:
   - title: Home
     url: /
+  - title: Blog
+    url: /blog/
   - title: Deployment
     url: /deployment/
   - title: Testing

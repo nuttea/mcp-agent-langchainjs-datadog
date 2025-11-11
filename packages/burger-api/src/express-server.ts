@@ -1,3 +1,7 @@
+// Import Datadog tracer first for SSI (Single Step Instrumentation)
+// This initializes the tracer as a side effect before other modules load
+import './dd-tracer.js';
+
 import express, { type Request, type Response } from 'express';
 import cors from 'cors';
 import fs from 'node:fs/promises';
@@ -8,6 +12,9 @@ import { BlobService } from './blob-service.js';
 import { ToppingCategory } from './topping.js';
 import { OrderStatus, type OrderItem } from './order.js';
 import { featureFlags } from './feature-flags.js';
+import { logger } from './logger.js';
+import { ddTracer as tracer } from './dd-tracer.js';
+import { BurgerMetrics } from './metrics.js';
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -35,7 +42,7 @@ function transformBurgerImageUrl(burger: any, baseUrl: string) {
 function injectCpuBlockingIfEnabled() {
   if (featureFlags.shouldAddCpuBlocking()) {
     const duration = featureFlags.getCpuBlockingDuration();
-    console.warn(`⚠️  Injecting CPU blocking: ${duration}ms synchronous operation`);
+    logger.warn({ duration }, '⚠️  Injecting CPU blocking: synchronous operation');
 
     // Intentionally block the event loop with CPU-intensive work
     const start = Date.now();
@@ -48,7 +55,7 @@ function injectCpuBlockingIfEnabled() {
     }
 
     // Force the result to be used (prevent optimization)
-    if (result < 0) console.log(result);
+    if (result < 0) logger.debug({ result }, 'CPU blocking result');
   }
 }
 
@@ -74,7 +81,7 @@ app.get('/', async (_req: Request, res: Response) => {
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
-    console.error('Error processing server status request:', error);
+    logger.error({ err: error }, 'Error processing server status request');
     res.status(200).json({
       status: 'up',
       error: 'Error retrieving order information',
@@ -103,7 +110,7 @@ app.get('/api', async (_req: Request, res: Response) => {
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
-    console.error('Error processing server status request:', error);
+    logger.error({ err: error }, 'Error processing server status request');
     res.status(200).json({
       status: 'up',
       error: 'Error retrieving order information',
@@ -114,12 +121,23 @@ app.get('/api', async (_req: Request, res: Response) => {
 
 // Get all burgers
 app.get('/api/burgers', async (req: Request, res: Response) => {
+  const span = tracer.startSpan('burger.menu.browse');
+  span.setTag('resource.name', 'get_all_burgers');
+
   try {
     // Inject CPU blocking if feature flag is enabled
     injectCpuBlockingIfEnabled();
 
     const dataService = await DbService.getInstance();
     const burgers = await dataService.getBurgers();
+
+    // Tag span with menu metrics
+    span.setTag('menu.burger_count', burgers.length);
+    const totalMenuValue = burgers.reduce((sum, b) => sum + b.price, 0);
+    span.setTag('menu.total_value', totalMenuValue);
+
+    // Record menu view metric
+    BurgerMetrics.recordMenuViewed();
 
     const baseUrl = getBaseUrl(req);
     const burgersWithFullUrls = burgers.map((burger) =>
@@ -128,8 +146,11 @@ app.get('/api/burgers', async (req: Request, res: Response) => {
 
     res.json(burgersWithFullUrls);
   } catch (error) {
-    console.error('Error getting burgers:', error);
+    span.setTag('error', error);
+    logger.error({ err: error }, 'Error getting burgers');
     res.status(500).json({ error: 'Failed to get burgers' });
+  } finally {
+    span.finish();
   }
 });
 
@@ -145,12 +166,15 @@ app.get('/api/burgers/:id', async (req: Request, res: Response) => {
       return;
     }
 
+    // Record burger view for popularity tracking
+    BurgerMetrics.recordBurgerViewed(burger.id);
+
     const baseUrl = getBaseUrl(req);
     const burgerWithFullUrl = transformBurgerImageUrl(burger, baseUrl);
 
     res.json(burgerWithFullUrl);
   } catch (error) {
-    console.error('Error getting burger:', error);
+    logger.error({ err: error }, 'Error getting burger');
     res.status(500).json({ error: 'Failed to get burger' });
   }
 });
@@ -170,12 +194,14 @@ app.get('/api/toppings/categories', async (_req: Request, res: Response) => {
 
 // Get all toppings - implements the same logic as toppings-get Azure Function
 app.get('/api/toppings', async (req: Request, res: Response) => {
-  console.log('Processing request to get toppings...');
-  console.log('Request query:', req.query);
+  logger.info({ query: req.query }, 'Processing request to get toppings');
 
   try {
     const dataService = await DbService.getInstance();
     const categoryParameter = req.query.category as string | undefined;
+
+    // Record toppings view metric
+    BurgerMetrics.recordToppingsViewed(categoryParameter);
 
     const baseUrl = getBaseUrl(req);
 
@@ -192,7 +218,7 @@ app.get('/api/toppings', async (req: Request, res: Response) => {
     const toppingsWithFullUrls = toppings.map((topping) => transformToppingImageUrl(topping, baseUrl));
     res.status(200).json(toppingsWithFullUrls);
   } catch (error) {
-    console.error('Error getting toppings:', error);
+    logger.error({ err: error }, 'Error getting toppings');
     res.status(500).json({ error: 'Failed to get toppings' });
   }
 });
@@ -213,14 +239,14 @@ app.get('/api/toppings/:id', async (req: Request, res: Response) => {
     const toppingWithFullUrl = transformToppingImageUrl(topping, baseUrl);
     res.status(200).json(toppingWithFullUrl);
   } catch (error) {
-    console.error('Error getting topping:', error);
+    logger.error({ err: error }, 'Error getting topping');
     res.status(500).json({ error: 'Failed to get topping' });
   }
 });
 
 // Get all orders - implements the same logic as orders-get Azure Function with query parameter support
 app.get('/api/orders', async (req: Request, res: Response) => {
-  console.log('Processing request to get all orders...');
+  logger.info('Processing request to get all orders');
 
   try {
     // Parse filters from query
@@ -260,7 +286,7 @@ app.get('/api/orders', async (req: Request, res: Response) => {
 
     res.status(200).json(filteredOrders);
   } catch (error) {
-    console.error('Error getting orders:', error);
+    logger.error({ err: error }, 'Error getting orders');
     res.status(500).json({ error: 'Failed to get orders' });
   }
 });
@@ -285,7 +311,7 @@ app.get('/api/orders/:orderId', async (req: Request, res: Response) => {
 
     res.status(200).json(order);
   } catch (error) {
-    console.error('Error getting order:', error);
+    logger.error({ err: error }, 'Error getting order');
     res.status(500).json({ error: 'Failed to get order' });
   }
 });
@@ -321,12 +347,22 @@ async function validateAndCalculateToppingsPrice(
 
 // Create new order - implements the same logic as orders-post Azure Function
 app.post('/api/orders', async (req: Request, res: Response) => {
-  console.log('Processing order creation request...');
+  // Create custom span for business-level order tracking
+  const orderSpan = tracer.startSpan('burger.order.create');
+  orderSpan.setTag('resource.name', 'order_placement');
+
+  logger.info('Processing order creation request');
 
   try {
     const dataService = await DbService.getInstance();
     const requestBody = req.body;
-    console.log('Request body:', requestBody);
+    logger.debug({ requestBody }, 'Order creation request body');
+
+    // Tag span with user context (anonymized)
+    if (requestBody.userId) {
+      const userHash = requestBody.userId.slice(0, 8);
+      orderSpan.setTag('order.user_hash', userHash);
+    }
 
     // Validate userId is provided
     if (!requestBody.userId) {
@@ -442,18 +478,45 @@ app.post('/api/orders', async (req: Request, res: Response) => {
       completedAt: undefined,
     });
 
+    // Tag span with business metrics
+    const toppingCount = orderItems.reduce((sum, item) => sum + (item.extraToppingIds?.length || 0), 0);
+    const burgerIds = orderItems.map(item => item.burgerId);
+
+    orderSpan.setTag('order.id', orderId);
+    orderSpan.setTag('order.total_price', totalPrice);
+    orderSpan.setTag('order.burger_count', burgerCount);
+    orderSpan.setTag('order.topping_count', toppingCount);
+    orderSpan.setTag('order.items', orderItems.length);
+    orderSpan.setTag('order.estimated_minutes', estimatedMinutes);
+    orderSpan.setTag('order.has_nickname', !!requestBody.nickname);
+    orderSpan.setTag('order.burger_ids', burgerIds.join(','));
+    orderSpan.setTag('order.status', 'created');
+
+    // Record business metrics for dashboards
+    BurgerMetrics.recordOrderPlaced({
+      totalPrice,
+      burgerCount,
+      toppingCount,
+      hasNickname: !!requestBody.nickname,
+      burgerIds,
+    });
+
     res.status(201).json(order);
   } catch (error) {
-    console.error('Error creating order:', error);
+    orderSpan.setTag('error', error);
+    logger.error({ err: error }, 'Error creating order');
     res.status(500).json({ error: 'Internal server error' });
+  } finally {
+    orderSpan.finish();
   }
 });
 
 // Delete order - implements the same logic as orders-delete Azure Function
 app.delete('/api/orders/:id', async (req: Request, res: Response) => {
-  console.log('Processing order cancellation request...');
-  console.log('Request params:', req.params);
-  console.log('Request query:', req.query);
+  const cancelSpan = tracer.startSpan('burger.order.cancel');
+  cancelSpan.setTag('resource.name', req.params?.id || 'unknown');
+
+  logger.info({ params: req.params, query: req.query }, 'Processing order cancellation request');
 
   try {
     const id = req.params?.id;
@@ -469,26 +532,45 @@ app.delete('/api/orders/:id', async (req: Request, res: Response) => {
       return;
     }
 
+    cancelSpan.setTag('order.id', id);
+    cancelSpan.setTag('order.user_hash', userId.slice(0, 8));
+
     const dataService = await DbService.getInstance();
 
     // Check if userId matches the order's userId
     const order = await dataService.getOrder(id, userId);
     if (!order) {
+      cancelSpan.setTag('cancel.result', 'not_found');
       res.status(404).json({ error: 'Order not found' });
       return;
     }
 
+    // Tag span with order details
+    cancelSpan.setTag('order.status_before', order.status);
+    cancelSpan.setTag('order.value', order.totalPrice);
+    const ageMinutes = (Date.now() - new Date(order.createdAt).getTime()) / 60000;
+    cancelSpan.setTag('order.age_minutes', ageMinutes);
+
     const deletedSuccessfully = await dataService.deleteOrder(id, userId);
 
     if (!deletedSuccessfully) {
+      cancelSpan.setTag('cancel.result', 'failed');
       res.status(404).json({ error: 'Order not found or cannot be cancelled' });
       return;
     }
 
+    cancelSpan.setTag('cancel.result', 'success');
+
+    // Record cancellation metrics
+    BurgerMetrics.recordOrderCancelled(order.status, order.totalPrice, ageMinutes);
+
     res.status(200).json({ message: 'Order cancelled successfully', orderId: id });
   } catch (error) {
-    console.error('Error cancelling order:', error);
+    cancelSpan.setTag('error', error);
+    logger.error({ err: error }, 'Error cancelling order');
     res.status(500).json({ error: 'Internal server error' });
+  } finally {
+    cancelSpan.finish();
   }
 });
 
@@ -518,14 +600,14 @@ app.get(/^\/api\/images\/(.+)$/, async (req: Request, res: Response) => {
     res.set('Cache-Control', 'public, max-age=86400'); // Cache for 24 hours
     res.send(imageBuffer);
   } catch (error) {
-    console.error('Error getting image:', error);
+    logger.error({ err: error }, 'Error getting image');
     res.status(500).json({ error: 'Failed to get image' });
   }
 });
 
 // Get OpenAPI spec - implements the same logic as openapi-get Azure Function
 app.get('/api/openapi', async (req: Request, res: Response) => {
-  console.log('Processing request to get OpenAPI specification...');
+  logger.info('Processing request to get OpenAPI specification');
 
   try {
     const openapiPath = path.join(process.cwd(), 'packages/burger-api/openapi.yaml');
@@ -535,10 +617,9 @@ app.get('/api/openapi', async (req: Request, res: Response) => {
     const defaultPort = requestUrl.protocol === 'https:' ? '443' : '80';
     const portSegment = requestUrl.port && requestUrl.port !== defaultPort ? `:${requestUrl.port}` : '';
     const burgerApiHost = `${requestUrl.protocol}//${requestUrl.hostname}${portSegment}`;
-    console.log('Burger API host:', burgerApiHost);
+    logger.info({ burgerApiHost }, 'Replacing <BURGER_API_HOST> in OpenAPI specification');
 
     // Replace BURGER_API_HOST placeholder with actual host URL
-    console.log('Replacing <BURGER_API_HOST> in OpenAPI specification...');
     const processedContent = openapiContent.replace('<BURGER_API_HOST>', burgerApiHost);
 
     const wantsJson =
@@ -551,7 +632,7 @@ app.get('/api/openapi', async (req: Request, res: Response) => {
         res.setHeader('Content-Type', 'application/json');
         res.status(200).json(json);
       } catch (error) {
-        console.error('YAML to JSON conversion failed:', error);
+        logger.error({ err: error }, 'YAML to JSON conversion failed');
         res.status(500).json({ error: 'YAML to JSON conversion failed.' });
       }
     } else {
@@ -559,24 +640,50 @@ app.get('/api/openapi', async (req: Request, res: Response) => {
       res.status(200).send(processedContent);
     }
   } catch (error) {
-    console.error('Error reading OpenAPI specification file:', error);
+    logger.error({ err: error }, 'Error reading OpenAPI specification file');
     res.status(500).json({ error: 'Error reading OpenAPI specification' });
   }
 });
 
 // Background worker for order state transitions (mimics Azure Functions timer)
 async function updateOrderStatuses() {
+  const workerSpan = tracer.startSpan('burger.orders.status_update_worker');
+  workerSpan.setTag('resource.name', 'background_job');
+
   try {
     const db = await DbService.getInstance();
     const startTime = Date.now();
     const now = new Date();
 
     const allOrders = await db.getOrders();
+
+    // Calculate queue statistics for business metrics
+    const queueStats = {
+      pending: allOrders.filter(o => o.status === OrderStatus.Pending).length,
+      inPreparation: allOrders.filter(o => o.status === OrderStatus.InPreparation).length,
+      ready: allOrders.filter(o => o.status === OrderStatus.Ready).length,
+      completed: allOrders.filter(o => o.status === OrderStatus.Completed).length,
+      cancelled: allOrders.filter(o => o.status === OrderStatus.Cancelled).length,
+    };
+
+    workerSpan.setTag('worker.total_orders', allOrders.length);
+    workerSpan.setTag('worker.queue.pending', queueStats.pending);
+    workerSpan.setTag('worker.queue.in_preparation', queueStats.inPreparation);
+    workerSpan.setTag('worker.queue.ready', queueStats.ready);
+
+    // Record queue depth metrics for Chef Dashboard
+    BurgerMetrics.recordQueueDepth(queueStats);
+
     const orders = allOrders.filter((order) =>
       [OrderStatus.Pending, OrderStatus.InPreparation, OrderStatus.Ready].includes(order.status),
     );
 
     const updateTasks = [];
+    let transitionCounts = {
+      pending_to_prep: 0,
+      prep_to_ready: 0,
+      ready_to_completed: 0,
+    };
     for (const order of orders) {
       switch (order.status) {
         case OrderStatus.Pending: {
@@ -587,6 +694,13 @@ async function updateOrderStatuses() {
               update: { status: OrderStatus.InPreparation },
               statusName: 'in-preparation',
             });
+            transitionCounts.pending_to_prep++;
+            // Record transition timing
+            BurgerMetrics.recordOrderStatusTransition(
+              OrderStatus.Pending,
+              OrderStatus.InPreparation,
+              minutesSinceCreated
+            );
           }
           break;
         }
@@ -600,6 +714,13 @@ async function updateOrderStatuses() {
               update: { status: OrderStatus.Ready, readyAt: now.toISOString() },
               statusName: 'ready',
             });
+            transitionCounts.prep_to_ready++;
+            const minutesSinceCreated = (now.getTime() - new Date(order.createdAt).getTime()) / 60_000;
+            BurgerMetrics.recordOrderStatusTransition(
+              OrderStatus.InPreparation,
+              OrderStatus.Ready,
+              minutesSinceCreated
+            );
           }
           break;
         }
@@ -614,6 +735,12 @@ async function updateOrderStatuses() {
                 update: { status: OrderStatus.Completed, completedAt: now.toISOString() },
                 statusName: 'completed',
               });
+              transitionCounts.ready_to_completed++;
+              BurgerMetrics.recordOrderStatusTransition(
+                OrderStatus.Ready,
+                OrderStatus.Completed,
+                minutesSinceReady
+              );
             }
           }
           break;
@@ -627,7 +754,7 @@ async function updateOrderStatuses() {
         await db.updateOrder(task.orderId, task.update);
         return { id: task.orderId, status: task.statusName, success: true };
       } catch (error) {
-        console.error(`ERROR: Failed to update order ${task.orderId} to ${task.statusName}:`, error);
+        logger.error({ err: error, orderId: task.orderId, statusName: task.statusName }, 'Failed to update order status');
         return { id: task.orderId, status: task.statusName, success: false, error: error as Error };
       }
     });
@@ -638,24 +765,36 @@ async function updateOrderStatuses() {
     const failed = results.filter((r) => !r.success).length;
     const elapsedMs = Date.now() - startTime;
 
+    // Tag span with worker results
+    workerSpan.setTag('worker.updates_attempted', updateTasks.length);
+    workerSpan.setTag('worker.updates_success', updated);
+    workerSpan.setTag('worker.updates_failed', failed);
+    workerSpan.setTag('worker.elapsed_ms', elapsedMs);
+    workerSpan.setTag('worker.transitions.pending_to_prep', transitionCounts.pending_to_prep);
+    workerSpan.setTag('worker.transitions.prep_to_ready', transitionCounts.prep_to_ready);
+    workerSpan.setTag('worker.transitions.ready_to_completed', transitionCounts.ready_to_completed);
+
     if (updated > 0 || failed > 0) {
-      console.log(`Order status updates: ${updated} orders updated, ${failed} failed (time elapsed: ${elapsedMs}ms)`);
+      logger.info({ updated, failed, elapsedMs, transitionCounts }, 'Order status updates completed');
     }
   } catch (error) {
-    console.error('Error in order status update worker:', error);
+    workerSpan.setTag('error', error);
+    logger.error({ err: error }, 'Error in order status update worker');
+  } finally {
+    workerSpan.finish();
   }
 }
 
 // Start the background worker (runs every 40 seconds, matching Azure Functions timer)
 const ORDER_STATUS_UPDATE_INTERVAL = 40_000; // 40 seconds
-console.log('Starting order status update background worker...');
+logger.info('Starting order status update background worker');
 setInterval(updateOrderStatuses, ORDER_STATUS_UPDATE_INTERVAL);
 // Run once immediately on startup
 updateOrderStatuses();
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`Burger API server listening on port ${PORT}`);
+  logger.info({ port: PORT }, 'Burger API server listening');
 });
 
 export default app;

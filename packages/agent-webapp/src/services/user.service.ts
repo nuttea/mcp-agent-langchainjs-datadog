@@ -27,8 +27,13 @@ export async function getUserId(refresh = false): Promise<string | undefined> {
     const username = userInfo?.userId;
 
     const headers: HeadersInit = { 'Content-Type': 'application/json' };
-    if (username) {
-      // Send the username in x-user-id header so backend can hash it
+
+    // Add JWT token if available (Google OAuth)
+    const authToken = localStorage.getItem('auth_token');
+    if (authToken) {
+      headers['Authorization'] = `Bearer ${authToken}`;
+    } else if (username) {
+      // Fallback: Send username in x-user-id header for simple auth
       headers['x-user-id'] = username;
     }
 
@@ -47,15 +52,28 @@ export async function initUserSession() {
       throw new Error('User not authenticated');
     }
 
-    // Get the username that the user entered during login
-    // It's stored in localStorage via auth.service.ts
+    // Get user information for Datadog RUM
     const userInfo = await getUserInfo();
-    const userName = userInfo?.userId; // This is the username they entered
+    const userName = userInfo?.userDetails; // Email for Google OAuth, or username for simple auth
+    const userEmail = userInfo?.identityProvider === 'google-oauth' ? userInfo.userDetails : undefined;
 
-    // Set user context in Datadog RUM for session tracking
-    // userId: internal hash ID from /api/me
-    // userName: the friendly name the user entered at login
-    setDatadogUser(userId, undefined, userName);
+    // Decode JWT to get full user info if available
+    const authToken = localStorage.getItem('auth_token');
+    let fullName = userName;
+    if (authToken) {
+      try {
+        const payload = JSON.parse(atob(authToken.split('.')[1]));
+        fullName = payload.name || payload.email;
+        // Set user context in Datadog RUM with email and name from JWT
+        setDatadogUser(userId, payload.email, fullName);
+      } catch (error) {
+        // Fallback to basic info
+        setDatadogUser(userId, userEmail, userName);
+      }
+    } else {
+      // Simple auth - use username
+      setDatadogUser(userId, userEmail, userName);
+    }
 
     // Set up user ID for chat history and chat components
     window.chatHistory.userId = userId;

@@ -4,6 +4,8 @@ metadata:
   name: postgres
   labels:
     app: postgres
+    tags.datadoghq.com/env: "dev"
+    tags.datadoghq.com/service: "postgres"
 spec:
   ports:
   - port: 5432

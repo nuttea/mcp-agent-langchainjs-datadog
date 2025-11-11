@@ -60,7 +60,7 @@ The `/_gcp_gatekeeper/authenticate` URL is where Google OAuth redirects users af
 
 ## 🔍 Detailed Explanation
 
-See: [IAP-REDIRECT-LOOP-TROUBLESHOOTING.md](IAP-REDIRECT-LOOP-TROUBLESHOOTING.md)
+See: [IAP_REDIRECT_LOOP_TROUBLESHOOTING.md](IAP_REDIRECT_LOOP_TROUBLESHOOTING.md)
 
 ---
 

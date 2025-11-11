@@ -17,22 +17,21 @@ datadog:
   apiKeyExistingSecret: "datadog-secret"
 
   # APM with Single Step Instrumentation
+  # SSI is selectively enabled for services with label dd-ssi-js=true
   apm:
     instrumentation:
       enabled: true
       targets:
-        - name: "mcp-agent-apps"
+        - name: "mcp-agent-apps-ssi"
           namespaceSelector:
             matchNames:
               - "mcp-agent-dev"
               - "mcp-agent-prod"
+          podSelector:
+            matchLabels:
+              dd-ssi-js: "true"
           ddTraceVersions:
-            #java: "1"
-            #python: "3"
             js: "5"
-            #php: "1"
-            #dotnet: "3"
-            #ruby: "2"
           ddTraceConfigs:
             - name: "DD_PROFILING_ENABLED"
               value: "auto"
@@ -78,6 +77,16 @@ datadog:
   # Process Agent
   processAgent:
     processCollection: true
+
+# Cluster Agent for advanced orchestrator features and autodiscovery
+clusterAgent:
+  enabled: true
+  replicas: 2
+
+  # Enable cluster checks for database monitoring
+  clusterChecksRunner:
+    enabled: true
+    replicas: 2
 
 # Use GCR registry for Datadog images
 registry: "gcr.io/datadoghq"

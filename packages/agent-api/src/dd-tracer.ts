@@ -1,45 +1,46 @@
 // Datadog APM and LLM Observability tracing setup
 // This file should be imported at the very beginning of your application
 // Reference: https://docs.datadoghq.com/llm_observability/setup/sdk/nodejs/
+//
+// This service uses code-based tracer initialization (not SSI)
+// SSI is reserved for simpler services like burger-mcp
+//
+// We initialize the tracer with:
+// - APM tracing for HTTP, Express, PostgreSQL
+// - Log injection (DD_LOGS_INJECTION)
+// - Runtime metrics (DD_RUNTIME_METRICS_ENABLED)
+// - Profiling (DD_PROFILING_ENABLED)
+// - DBM integration for PostgreSQL query correlation
+// - LLM Observability for AI agent workflows
 
 import tracer from 'dd-trace';
 
-// Initialize Datadog tracer with LLM Observability and DBM correlation
-// Note: DD_SITE, DD_TRACE_DEBUG, and other settings can be set via environment variables
-// Reference: https://docs.datadoghq.com/tracing/trace_collection/dd_libraries/nodejs/
-// DBM Correlation: https://docs.datadoghq.com/database_monitoring/connect_dbm_and_apm/?tab=nodejs
+// Initialize tracer with explicit configuration
 const ddTracer = tracer.init({
-  // LLM Observability configuration
-  llmobs: {
-    mlApp: process.env.DD_LLMOBS_ML_APP || 'contoso-burgers-agent', // Name for your LLM application
-    agentlessEnabled: process.env.DD_LLMOBS_AGENTLESS_ENABLED === 'true', // Enable agentless mode (sends directly to Datadog)
-  },
-
-  // Environment configuration (these can also be set via DD_ENV, DD_SERVICE, DD_VERSION env vars)
-  env: process.env.DD_ENV || process.env.NODE_ENV || 'dev',
-  service: process.env.DD_SERVICE || 'agent-api',
-  version: process.env.DD_VERSION || '1.0.0',
-
-  // APM configuration (logInjection, runtimeMetrics, profiling are set via environment variables)
-  logInjection: process.env.DD_LOGS_INJECTION === 'true',
-  runtimeMetrics: process.env.DD_RUNTIME_METRICS_ENABLED === 'true',
-  profiling: process.env.DD_PROFILING_ENABLED === 'true',
-
-  // Database Monitoring (DBM) integration configuration
-  // Enable DBM propagation to correlate APM traces with database queries
-  dbmPropagationMode: 'full', // Options: 'full' or 'service'
+  logInjection: true,
+  runtimeMetrics: true,
+  profiling: true,
+  dbmPropagationMode: 'full',
+  // Service/env/version come from environment variables (DD_SERVICE, DD_ENV, DD_VERSION)
 });
 
 // Export the LLM Observability SDK
+// LLM Observability is configured via environment variables in Kubernetes ConfigMap:
+// - DD_LLMOBS_ENABLED=true
+// - DD_LLMOBS_ML_APP=contoso-burgers-agent
+// - DD_LLMOBS_AGENTLESS_ENABLED=false
 export const llmobs = ddTracer.llmobs;
 export { ddTracer };
 
-// Log initialization
-console.log('Datadog LLM Observability and DBM initialized:', {
+// Log tracer initialization
+console.log('Datadog tracer initialized (code-based):', {
   mlApp: process.env.DD_LLMOBS_ML_APP || 'contoso-burgers-agent',
+  llmObsEnabled: process.env.DD_LLMOBS_ENABLED === 'true',
   site: process.env.DD_SITE || 'datadoghq.com',
-  env: process.env.DD_ENV || process.env.NODE_ENV || 'development',
+  env: process.env.DD_ENV || 'dev',
   service: process.env.DD_SERVICE || 'agent-api',
-  agentlessEnabled: process.env.DD_LLMOBS_AGENTLESS_ENABLED === 'true',
+  version: process.env.DD_VERSION || '1.0.0',
+  logsInjection: true,
+  profilingEnabled: true,
   dbmPropagationMode: 'full',
 });

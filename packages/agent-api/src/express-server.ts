@@ -1,3 +1,6 @@
+// Load environment variables from .env file (for local development)
+import 'dotenv/config';
+
 // IMPORTANT: Datadog tracer must be imported first, before any other imports
 // Reference: https://docs.datadoghq.com/llm_observability/setup/sdk/nodejs/
 // This import initializes the Datadog tracer as a side effect
@@ -20,6 +23,9 @@ import { getAuthenticationUserId, getAzureOpenAiTokenProvider, getInternalUserId
 import { type AIChatCompletionRequest, type AIChatCompletionDelta } from './models.js';
 import { logger } from './logger.js';
 import { extractIAPUser, isIAPEnabled, getIAPUser } from './middleware/iap-auth.js';
+import { verifyGoogleToken, createSessionToken, isGoogleAuthEnabled } from './auth/google-oauth.js';
+import tracer from 'dd-trace';
+import { llmobs } from './dd-tracer.js';
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -138,12 +144,26 @@ app.get('/api/simulate/slow-error', async (req, _res) => {
 });
 
 // Get user info - implements the same logic as me-get Azure Function
-// Supports Azure Easy Auth, IAP, and anonymous mode for Kubernetes deployment
+// Supports Google OAuth (JWT), Azure Easy Auth, IAP, and anonymous mode
 app.get('/api/me', async (req, res) => {
   try {
     let authenticationUserId = getAuthenticationUserId(req as any);
 
-    // Check for IAP authentication first
+    // Check for Google OAuth JWT token first
+    if (!authenticationUserId) {
+      const authHeader = req.headers.authorization;
+      if (authHeader?.startsWith('Bearer ')) {
+        const token = authHeader.substring(7);
+        const { verifySessionToken } = await import('./auth/google-oauth.js');
+        const user = verifySessionToken(token);
+        if (user) {
+          authenticationUserId = user.email;
+          logger.info(`Using Google OAuth authenticated user: ${user.email}`);
+        }
+      }
+    }
+
+    // Check for IAP authentication
     if (!authenticationUserId) {
       const iapUser = getIAPUser(req);
       if (iapUser) {
@@ -182,8 +202,72 @@ app.get('/api/me', async (req, res) => {
 
     res.json({ id: user.id, createdAt: user.createdAt });
   } catch (error) {
-    console.error('Error in me-get handler', error);
+    logger.error({ err: error }, 'Error in me-get handler');
     res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// Google OAuth authentication endpoint
+// Cloud-agnostic authentication that works with any infrastructure
+app.post('/api/auth/google', async (req, res) => {
+  try {
+    const { credential } = req.body;
+
+    if (!credential) {
+      res.status(400).json({ error: 'Missing credential in request body' });
+      return;
+    }
+
+    if (!isGoogleAuthEnabled()) {
+      res.status(503).json({ error: 'Google authentication is not enabled' });
+      return;
+    }
+
+    // Verify Google ID token
+    const user = await verifyGoogleToken(credential);
+    logger.info(`Google OAuth login: ${user.email}`);
+
+    // Create session token (JWT)
+    const sessionToken = createSessionToken(user);
+
+    // Create or get user in database using email as authentication ID
+    const userId = createHash('sha256').update(user.email).digest('hex').slice(0, 32);
+    const db = await UserDbService.getInstance();
+    let dbUser = await db.getUserById(userId);
+
+    if (!dbUser) {
+      dbUser = await db.createUser(userId);
+      logger.info(`Created new user from Google OAuth: ${user.email} (ID: ${userId})`);
+    } else {
+      logger.info(`Existing user logged in: ${user.email} (ID: ${userId})`);
+    }
+
+    // Add Datadog APM tags for authentication event
+    const span = tracer.scope().active();
+    if (span) {
+      span.setTag('usr.email', user.email);
+      span.setTag('usr.id', user.userId);
+      span.setTag('usr.name', user.name);
+      span.setTag('auth.provider', 'google-oauth');
+      span.setTag('auth.event', 'login');
+    }
+
+    // Return session token and user info
+    res.json({
+      token: sessionToken,
+      user: {
+        userId: dbUser.id,
+        email: user.email,
+        name: user.name,
+        picture: user.picture,
+      },
+    });
+  } catch (error: any) {
+    logger.error('Google OAuth authentication error:', error);
+    res.status(401).json({
+      error: 'Authentication failed',
+      message: error.message || 'Invalid Google token',
+    });
   }
 });
 
@@ -243,7 +327,7 @@ const getChatsHandler = async (req: express.Request, res: express.Response) => {
     }));
     res.json(chatSessions);
   } catch (error: any) {
-    console.error(`Error when processing chats-get request: ${error.message}`);
+    logger.error({ err: error }, 'Error when processing chats-get request');
     res.status(404).json({ error: 'Session not found' });
   }
 };
@@ -375,14 +459,14 @@ app.post('/api/chats/stream', async (req, res) => {
     // Check if we have either Azure OpenAI or regular OpenAI configured
     if (!azureOpenAiEndpoint && !openaiApiKey) {
       const errorMessage = 'Missing required environment variables: AZURE_OPENAI_API_ENDPOINT or OPENAI_API_KEY';
-      console.error(errorMessage);
+      logger.error(errorMessage);
       res.status(500).json({ error: errorMessage });
       return;
     }
 
     if (!burgerMcpUrl) {
       const errorMessage = 'Missing required environment variable: BURGER_MCP_URL';
-      console.error(errorMessage);
+      logger.error(errorMessage);
       res.status(500).json({ error: errorMessage });
       return;
     }
@@ -476,8 +560,33 @@ app.post('/api/chats/stream', async (req, res) => {
       }
     }
 
-    const tools = await loadMcpTools('burger', client);
-    console.log(`Loaded ${tools.length} tools from Burger MCP server`);
+    // Load MCP tools with LLM Observability tracking
+    const tools = await llmobs.trace(
+      {
+        kind: 'tool',
+        name: 'load_mcp_tools',
+        sessionId,
+      },
+      async (_span) => {
+        const loadedTools = await loadMcpTools('burger', client);
+        logger.info({ toolCount: loadedTools.length, sessionId }, 'Loaded tools from Burger MCP server');
+
+        // Annotate with tool metadata
+        llmobs.annotate({
+          outputData: {
+            toolCount: loadedTools.length,
+            toolNames: loadedTools.map(t => t.name)
+          },
+          metadata: {
+            mcpServer: 'burger-mcp',
+            mcpUrl: burgerMcpUrl,
+            mcpSessionId,
+          }
+        });
+
+        return loadedTools;
+      }
+    );
 
     const agent = createAgent({
       model,
@@ -487,15 +596,38 @@ app.post('/api/chats/stream', async (req, res) => {
 
     const question = messages.at(-1)!.content;
 
-    // Start the agent and stream the response events
-    const responseStream = agent.streamEvents(
+    // Start the agent with LLM Observability workflow tracking
+    const responseStream = await llmobs.trace(
       {
-        messages: [['human', `userId: ${userId}`], ...previousMessages, ['human', question]],
+        kind: 'workflow',
+        name: 'burger_assistant_agent',
+        sessionId,
       },
-      {
-        configurable: { sessionId },
-        version: 'v2',
-      },
+      async (_span) => {
+        // Annotate input
+        llmobs.annotate({
+          inputData: {
+            question: question.slice(0, 500), // First 500 chars
+            userId
+          },
+          metadata: {
+            previousMessagesCount: previousMessages.length,
+            mcpSessionId: mcpSessionId || 'new',
+            model: azureOpenAiEndpoint ? process.env.AZURE_OPENAI_MODEL : process.env.OPENAI_MODEL,
+          }
+        });
+
+        // Stream the agent response events
+        return agent.streamEvents(
+          {
+            messages: [['human', `userId: ${userId}`], ...previousMessages, ['human', question]],
+          },
+          {
+            configurable: { sessionId },
+            version: 'v2',
+          },
+        );
+      }
     );
 
     // Create a short title for this chat session (only if chat history is enabled)
@@ -507,7 +639,7 @@ app.post('/api/chats/stream', async (req, res) => {
             ['system', titleSystemPrompt],
             ['human', question],
           ]);
-          console.log(`Title for session: ${response.text}`);
+          logger.debug({ title: response.text, sessionId }, 'Generated session title');
           chatHistory.setContext({ title: response.text });
         }
       }
@@ -520,11 +652,24 @@ app.post('/api/chats/stream', async (req, res) => {
     // Update chat history when the response is complete
     const onResponseComplete = async (content: string) => {
       try {
+        // Annotate LLM Observability with the final output
+        if (content) {
+          llmobs.annotate({
+            outputData: {
+              response: content.slice(0, 1000), // First 1000 chars
+              responseLength: content.length
+            },
+            metadata: {
+              sessionUpdated: !!chatHistory
+            }
+          });
+        }
+
         if (content && chatHistory) {
           // When no content is generated, do not update the history as it's likely an error
           await chatHistory.addMessage(new HumanMessage(question));
           await chatHistory.addMessage(new AIMessage(content));
-          console.log('Chat history updated successfully');
+          logger.info({ sessionId }, 'Chat history updated successfully');
 
           // Ensure the session title has finished generating
           await sessionTitlePromise;
@@ -533,7 +678,7 @@ app.post('/api/chats/stream', async (req, res) => {
         // Close MCP client connection
         await client.close();
       } catch (error) {
-        console.error('Error after response completion:', error);
+        logger.error({ err: error }, 'Error after response completion');
       }
     };
 

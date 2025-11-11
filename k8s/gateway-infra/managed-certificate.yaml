@@ -1,0 +1,30 @@
+---
+# Google-Managed SSL Certificate for Gateway API
+# Uses Load Balancer Authorization (simpler than DNS authorization)
+#
+# Requirements:
+# 1. Cloudflare proxy must be DISABLED (DNS only mode - gray cloud)
+# 2. DNS must point directly to GCP ALB IP: 35.244.154.202
+# 3. Gateway must have HTTPS listener on port 443
+#
+# Provisioning time: 10-30 minutes after Cloudflare proxy is disabled
+#
+# Documentation: /docs/deployment/GOOGLE_SSL_LOAD_BALANCER_AUTH.md
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: platform-demo-cert
+  namespace: shared-infra
+  labels:
+    app: mcp-agent
+    purpose: ssl-certificate
+spec:
+  # All domains that need SSL certificates
+  # Maximum 100 domains per certificate
+  domains:
+    - www.platform-engineering-demo.dev
+    - platform-engineering-demo.dev
+    - dev.platform-engineering-demo.dev
+    - burgers.platform-engineering-demo.dev
+    - api.platform-engineering-demo.dev
+    - burger-api.platform-engineering-demo.dev

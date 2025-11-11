@@ -1,6 +1,6 @@
 # IAP Quick Start Guide
 
-This is a condensed guide for enabling Identity-Aware Proxy (IAP) on your GKE Gateway API deployment. For detailed information, see [iap-setup.md](iap-setup.md).
+This is a condensed guide for enabling Identity-Aware Proxy (IAP) on your GKE Gateway API deployment. For detailed information, see [IAP_SETUP.md](IAP_SETUP.md).
 
 ## Prerequisites
 
@@ -209,7 +209,7 @@ kubectl patch gcpbackendpolicy agent-webapp-iap-policy -n mcp-agent-prod \
 
 ## Resources
 
-- **Detailed Guide**: [iap-setup.md](iap-setup.md)
+- **Detailed Guide**: [IAP_SETUP.md](IAP_SETUP.md)
 - **Google Cloud IAP Docs**: https://cloud.google.com/iap/docs
 - **GKE Gateway API**: https://cloud.google.com/kubernetes-engine/docs/how-to/configure-gateway-resources
 - **Datadog IAP Monitoring**: https://docs.datadoghq.com/security/application_security/
@@ -244,4 +244,4 @@ After enabling IAP:
 4. **Set Up Audit Logging**: Enable Cloud Audit Logs for IAP access
 5. **Test Error Scenarios**: Verify proper handling of authentication failures
 
-For detailed implementation, see the [full IAP setup guide](iap-setup.md).
+For detailed implementation, see the [full IAP setup guide](IAP_SETUP.md).

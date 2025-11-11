@@ -11,7 +11,7 @@
 # 5. Backend marked UNHEALTHY
 # 6. User requests fail with ERR_TOO_MANY_REDIRECTS
 #
-# Documentation: /docs/deployment/iap-health-check-fix.md
+# Documentation: /docs/deployment/IAP_HEALTH_CHECK_FIX.md
 apiVersion: networking.gke.io/v1
 kind: HealthCheckPolicy
 metadata:

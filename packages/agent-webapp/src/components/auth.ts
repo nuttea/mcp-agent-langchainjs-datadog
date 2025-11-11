@@ -106,10 +106,51 @@ export class AuthComponent extends LitElement {
   async onLogoutClicked() {
     clearUserId();
     clearUserSession(); // Clear cached user ID so next login gets fresh data
+    localStorage.removeItem('auth_token'); // Clear Google OAuth token
     this._userDetails = undefined;
     this.requestUpdate();
     // Dispatch custom event to notify other auth components
     window.dispatchEvent(new CustomEvent('auth-state-changed', { detail: { userDetails: undefined } }));
+  }
+
+  // Google OAuth callback handler
+  async handleGoogleCallback(response: any) {
+    try {
+      // Send credential to backend for verification
+      const result = await fetch('/api/auth/google', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ credential: response.credential }),
+      });
+
+      if (!result.ok) {
+        throw new Error('Authentication failed');
+      }
+
+      const data = await result.json();
+
+      // Store session token and user ID
+      localStorage.setItem('auth_token', data.token);
+      setUserId(data.user.userId);
+
+      // Update UI
+      this._userDetails = await getUserInfo(true);
+      this.requestUpdate();
+
+      // Notify other components
+      window.dispatchEvent(new CustomEvent('auth-state-changed', {
+        detail: { userDetails: this._userDetails },
+      }));
+
+      console.log('Google OAuth login successful:', data.user.email);
+
+      // Reload the page to initialize user session properly
+      // This ensures all components (member card, chat, history) are initialized
+      window.location.reload();
+    } catch (error) {
+      console.error('Google OAuth authentication error:', error);
+      alert('Authentication failed. Please try again.');
+    }
   }
 
   protected renderStatus = () =>
@@ -132,20 +173,8 @@ export class AuthComponent extends LitElement {
 
   protected renderLoginOptions = () =>
     html`<section class="auth-login">
-      <form class="login-form" @submit=${this.onLoginSubmit}>
-        <label for="userId">Enter your User ID:</label>
-        <input
-          type="text"
-          id="userId"
-          placeholder="e.g., john.doe"
-          .value=${this._userIdInput}
-          @input=${(e: InputEvent) => {
-            this._userIdInput = (e.target as HTMLInputElement).value;
-          }}
-          required
-        />
-        <button type="submit" class="login-button">Continue</button>
-      </form>
+      <!-- Google Sign-In Button -->
+      <div id="google-signin-button" class="google-signin-container"></div>
     </section>`;
 
   protected renderLogout = () =>
@@ -187,6 +216,51 @@ export class AuthComponent extends LitElement {
       this.classList.add('authenticated');
     } else {
       this.classList.remove('authenticated');
+    }
+
+    // Initialize Google Sign-In button after render
+    if (!this._userDetails && this.shadowRoot) {
+      this.initializeGoogleSignIn();
+    }
+  }
+
+  private initializeGoogleSignIn() {
+    const buttonContainer = this.shadowRoot?.querySelector('#google-signin-button');
+    if (!buttonContainer) {
+      return;
+    }
+
+    // Check if Google Identity Services is loaded
+    if (typeof (window as any).google === 'undefined') {
+      // Google SDK not loaded yet, retry after a short delay
+      setTimeout(() => this.initializeGoogleSignIn(), 100);
+      return;
+    }
+
+    // Initialize Google Sign-In
+    try {
+      (window as any).google.accounts.id.initialize({
+        client_id: '449012790678-o4n20ce420kjuao68mciclp915dlrubj.apps.googleusercontent.com',
+        callback: this.handleGoogleCallback.bind(this),
+        auto_select: false,
+      });
+
+      // Render the button with improved styling
+      (window as any).google.accounts.id.renderButton(
+        buttonContainer,
+        {
+          theme: 'filled_blue',  // More prominent button
+          size: 'large',
+          text: 'signin_with',
+          shape: 'rectangular',
+          logo_alignment: 'left',
+          width: 280,  // Fixed width for consistency
+        }
+      );
+    } catch (error) {
+      console.error('Failed to initialize Google Sign-In:', error);
+      // Retry once on error
+      setTimeout(() => this.initializeGoogleSignIn(), 500);
     }
   }
 
@@ -278,9 +352,43 @@ export class AuthComponent extends LitElement {
     }
     .auth-login {
       display: flex;
+      flex-direction: column;
       justify-content: center;
       align-items: center;
       min-height: 300px;
+      gap: var(--space-xl);
+    }
+    .google-signin-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 44px;
+      padding: var(--space-md);
+
+      /* Add subtle container styling */
+      background: rgba(255, 255, 255, 0.5);
+      border-radius: var(--border-radius);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+    .divider {
+      display: flex;
+      align-items: center;
+      width: 100%;
+      max-width: 400px;
+      margin: var(--space-md) 0;
+      color: var(--disabled-color);
+      font-size: 0.9rem;
+
+      &::before,
+      &::after {
+        content: '';
+        flex: 1;
+        border-bottom: 1px solid var(--disabled-color);
+      }
+
+      span {
+        padding: 0 var(--space-md);
+      }
     }
     .login-form {
       padding: var(--space-xl);

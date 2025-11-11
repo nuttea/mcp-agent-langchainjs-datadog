@@ -60,10 +60,10 @@ export function extractIAPHeaders(req: Request): IAPUser | null {
  * Does not enforce authentication, just extracts if present
  *
  * @param req - Express request
- * @param res - Express response
+ * @param _res - Express response (unused)
  * @param next - Next middleware function
  */
-export function extractIAPUser(req: Request, res: Response, next: NextFunction): void {
+export function extractIAPUser(req: Request, _res: Response, next: NextFunction): void {
   const iapUser = extractIAPHeaders(req);
 
   if (iapUser) {

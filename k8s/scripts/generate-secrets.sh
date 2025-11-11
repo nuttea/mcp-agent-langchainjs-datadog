@@ -57,6 +57,36 @@ check_env_vars() {
     echo -e "  ${GREEN}✓${NC} OPENAI_API_KEY"
   fi
 
+  # Check Google OAuth variables (required for app-level authentication)
+  if [ -z "$GOOGLE_CLIENT_ID" ]; then
+    missing_vars+=("GOOGLE_CLIENT_ID")
+    echo -e "  ${RED}✗${NC} GOOGLE_CLIENT_ID"
+  else
+    echo -e "  ${GREEN}✓${NC} GOOGLE_CLIENT_ID"
+  fi
+
+  if [ -z "$GOOGLE_CLIENT_SECRET" ]; then
+    missing_vars+=("GOOGLE_CLIENT_SECRET")
+    echo -e "  ${RED}✗${NC} GOOGLE_CLIENT_SECRET"
+  else
+    echo -e "  ${GREEN}✓${NC} GOOGLE_CLIENT_SECRET"
+  fi
+
+  if [ -z "$JWT_SECRET" ]; then
+    missing_vars+=("JWT_SECRET")
+    echo -e "  ${RED}✗${NC} JWT_SECRET"
+  else
+    echo -e "  ${GREEN}✓${NC} JWT_SECRET"
+  fi
+
+  # Check Datadog Postgres credentials
+  if [ -z "$DATADOG_POSTGRES_PASSWORD" ]; then
+    missing_vars+=("DATADOG_POSTGRES_PASSWORD")
+    echo -e "  ${RED}✗${NC} DATADOG_POSTGRES_PASSWORD"
+  else
+    echo -e "  ${GREEN}✓${NC} DATADOG_POSTGRES_PASSWORD"
+  fi
+
   # Check optional variables
   if [ -n "$VERTEX_AI_KEY" ]; then
     echo -e "  ${GREEN}✓${NC} VERTEX_AI_KEY (optional)"
@@ -110,6 +140,14 @@ generate_secrets_for_env() {
   local dd_api_key_b64=$(echo -n "$DD_API_KEY" | base64 | tr -d '\n')
   local openai_api_key_b64=$(echo -n "$OPENAI_API_KEY" | base64 | tr -d '\n')
 
+  # Google OAuth credentials (required for app-level authentication)
+  local google_client_id_b64=$(echo -n "$GOOGLE_CLIENT_ID" | base64 | tr -d '\n')
+  local google_client_secret_b64=$(echo -n "$GOOGLE_CLIENT_SECRET" | base64 | tr -d '\n')
+  local jwt_secret_b64=$(echo -n "$JWT_SECRET" | base64 | tr -d '\n')
+
+  # Datadog Postgres credentials (required for DBM)
+  local datadog_postgres_password_b64=$(echo -n "$DATADOG_POSTGRES_PASSWORD" | base64 | tr -d '\n')
+
   # Optional: Vertex AI key
   local vertex_ai_key_b64=""
   if [ -n "$VERTEX_AI_KEY" ]; then
@@ -156,6 +194,14 @@ data:
   # PostgreSQL password (base64 encoded - references postgres-secret)
   # Note: This duplicates the value from postgres-secret for compatibility
   postgres-password: $(echo -n "changeme123" | base64)
+
+  # Google OAuth Credentials (base64 encoded)
+  # Used for application-level Google authentication (cloud-agnostic)
+  google-client-id: ${google_client_id_b64}
+  google-client-secret: ${google_client_secret_b64}
+
+  # JWT Secret for session token signing (base64 encoded)
+  jwt-secret: ${jwt_secret_b64}
 EOF
 
   # Add optional secrets if they exist
@@ -178,9 +224,34 @@ EOF
   # Add final newline
   echo "" >> "$output_file"
 
+  # Generate separate datadog-postgres-credentials secret
+  cat >> "$output_file" <<EOF
+---
+# Datadog DBM Credentials
+# Used by Datadog agent to monitor PostgreSQL database
+apiVersion: v1
+kind: Secret
+metadata:
+  name: datadog-postgres-credentials
+  namespace: ${namespace}
+  labels:
+    app: mcp-agent
+    environment: ${target_env}
+    managed-by: script
+type: Opaque
+data:
+  # Datadog user password for PostgreSQL monitoring (base64 encoded)
+  password: ${datadog_postgres_password_b64}
+EOF
+
+  echo "" >> "$output_file"
+
   echo -e "${GREEN}✓${NC} Secrets file generated successfully!"
   echo -e "  File: ${YELLOW}${output_file}${NC}"
   echo -e "  Namespace: ${YELLOW}${namespace}${NC}"
+  echo -e "  Includes:"
+  echo -e "    - app-secrets (API keys, OAuth, JWT)"
+  echo -e "    - datadog-postgres-credentials (DBM monitoring)"
   echo ""
 }
 
