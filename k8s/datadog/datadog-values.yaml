@@ -82,6 +82,8 @@ datadog:
 clusterAgent:
   enabled: true
   replicas: 2
+  pdb:
+    create: true
 
   # Enable cluster checks for database monitoring
   clusterChecksRunner:

@@ -1,6 +1,6 @@
-// Import Datadog tracer first for SSI (Single Step Instrumentation)
-// This initializes the tracer as a side effect before other modules load
-import './dd-tracer.js';
+// SSI (Single Step Instrumentation) automatically injects dd-trace
+// No need to import dd-tracer.js - Kubernetes admission controller handles it
+// The tracer is preloaded via NODE_OPTIONS by the Datadog Cluster Agent
 
 import process from 'node:process';
 import { randomUUID } from 'node:crypto';
