@@ -100,7 +100,7 @@ export class UserCard extends LitElement {
               <div class="member-header">
                 <img src="${this.memberInfo.avatar}" alt="Member avatar" class="member-avatar" />
                 <div class="member-title">
-                  <h1>Contoso Burgers</h1>
+                  <h1>Bits Burgers</h1>
                   <h2>VIP Member</h2>
                 </div>
               </div>
@@ -124,7 +124,7 @@ export class UserCard extends LitElement {
               </div>
             `
           : html`
-              <h1>Contoso Burgers</h1>
+              <h1>Bits Burgers</h1>
               <h2>Membership Card</h2>
               <p>Card attributed to:</p>
               <div><pre>${this.username}</pre></div>
