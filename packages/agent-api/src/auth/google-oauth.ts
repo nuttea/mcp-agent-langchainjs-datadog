@@ -17,8 +17,14 @@ import { logger } from '../logger.js';
 // Google OAuth client for token verification
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
-// JWT secret for session tokens
-const JWT_SECRET = process.env.JWT_SECRET || 'change-me-in-production';
+// JWT secret for session tokens - MUST be set in production
+const JWT_SECRET: string = (() => {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error('JWT_SECRET environment variable must be set for secure session management');
+  }
+  return secret;
+})();
 
 /**
  * User information extracted from Google ID token
@@ -60,9 +66,19 @@ export async function verifyGoogleToken(token: string): Promise<GoogleUser> {
       throw new Error('Invalid token payload');
     }
 
-    // Optional: Verify email domain (restrict to specific domains)
-    const allowedDomains = process.env.ALLOWED_EMAIL_DOMAINS?.split(',') || ['datadoghq.com'];
-    const emailDomain = payload.email.split('@')[1];
+    // Validate email format before extracting domain
+    const emailParts = payload.email.split('@');
+    if (emailParts.length !== 2 || !emailParts[1]) {
+      logger.warn(`Invalid email format: ${payload.email}`);
+      throw new Error('Invalid email format');
+    }
+    const emailDomain = emailParts[1];
+
+    // Verify email domain (restrict to specific domains)
+    const allowedDomainsEnv = process.env.ALLOWED_EMAIL_DOMAINS;
+    const allowedDomains = allowedDomainsEnv
+      ? allowedDomainsEnv.split(',').map(d => d.trim()).filter(d => d)
+      : ['datadoghq.com'];
 
     if (!allowedDomains.includes(emailDomain)) {
       logger.warn(`Unauthorized domain attempted login: ${emailDomain}`);
