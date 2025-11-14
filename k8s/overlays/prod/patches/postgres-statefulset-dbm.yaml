@@ -17,7 +17,7 @@ spec:
                   "host": "postgres-0.postgres.mcp-agent-prod.svc.cluster.local",
                   "port": 5432,
                   "username": "datadog",
-                  "password": "qOQQapEkfrydmKLbsC6/tn+C8lQdYWuoypg9Q3H39Ac=",
+                  "password": "ENC[k8s_secret@mcp-agent-prod/datadog-postgres-credentials/password]",
                   "dbname": "burgerdb",
                   "dbm": true,
                   "dbstrict": true,

@@ -16,6 +16,12 @@ datadog:
   # API key stored in Kubernetes secret
   apiKeyExistingSecret: "datadog-secret"
 
+  # Secret Backend Configuration
+  # Enables ENC[k8s_secret@namespace/secret/key] syntax in annotations
+  # Reference: https://docs.datadoghq.com/agent/configuration/secrets-management/
+  secretBackend:
+    command: "/readsecret_multiple_providers.sh"
+
   # APM with Single Step Instrumentation
   # SSI is selectively enabled for services with label dd-ssi-js=true
   apm:
